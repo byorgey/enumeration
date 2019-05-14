@@ -187,11 +187,11 @@ data Enumeration a = Enumeration
   deriving Functor
 
 -- | The @Applicative@ instance for @Enumeration@ works similarly to
---   the instance for lists: @pure = always@, and @f '<*>' x@ takes
+--   the instance for lists: @pure = singleton@, and @f '<*>' x@ takes
 --   the Cartesian product of @f@ and @x@ (see ('><')) and applies
 --   each paired function and argument.
 instance Applicative Enumeration where
-  pure    = always
+  pure    = singleton
   f <*> x = uncurry ($) <$> (f >< x)
 
 -- | The @Alternative@ instance for @Enumeration@ represents the sum
