@@ -87,6 +87,8 @@ module Data.Enumeration
   , (><)
   , interleave
 
+  , maybeOf
+  , eitherOf
   , listOf
 
     -- * Utilities
@@ -625,7 +627,30 @@ e1 >< e2 = case (card e1, card e2) of
     , select = \k -> let (i,j) = diagonal k in (select e1 i, select e2 j)
     }
 
+------------------------------------------------------------
+-- Building standard data types
+------------------------------------------------------------
+
+-- | Enumerate all possible values of type `Maybe a`, where the values
+--   of type `a` are taken from the given enumeration.
+--
+-- >>> enumerate $ maybeOf (finiteList [1,2,3])
+-- [Nothing,Just 1,Just 2,Just 3]
+maybeOf :: Enumeration a -> Enumeration (Maybe a)
+maybeOf e = singleton Nothing <|> Just <$> e
+
+-- | Enumerae all possible values of type @Either a b@ with inner values
+--   taken from the given enumerations.
+--
+-- >>> enumerate . takeE 6 $ eitherOf nat nat
+-- [Left 0,Right 0,Left 1,Right 1,Left 2,Right 2]
+eitherOf :: Enumeration a -> Enumeration b -> Enumeration (Either a b)
+eitherOf e1 e2 = Left <$> e1 <|> Right <$> e2
+
 -- | Enumerate all possible lists containing values from the given enumeration.
+--
+-- >>> enumerate . takeE 15 $ listOf nat
+-- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
 listOf :: Enumeration a -> Enumeration [a]
 listOf e = case card e of
   Finite 0 -> empty
