@@ -8,14 +8,8 @@
 --
 -- SPDX-License-Identifier: BSD-3-Clause
 --
--- An /enumeration/ is a finite or countably infinite sequence of
--- values, represented as a function from an index to a value, so it
--- works even for very large finite sets and supports random uniform
--- sampling.
---
--- Enumerations are isomorphic to lists, so many functions in this
--- module have the same name as common list functions.  It is
--- recommended to import this module qualified, e.g. XXX
+-- An initial attempt at size-indexed enumerations, a la FEAT/species.
+-- Seems like it might be more trouble than it's worth.
 --
 -----------------------------------------------------------------------------
 
