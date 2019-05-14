@@ -18,6 +18,11 @@
 -- they support efficient indexing and can be constructed for very
 -- large finite sets.  A few examples are shown below.
 --
+-- >>> enumerate . takeE 15 $ listOf nat
+-- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
+-- >>> select (listOf nat) 986235087203970702008108646
+-- [11987363624969,1854392,1613,15,0,2,0]
+--
 -- @
 -- data Tree = L | B Tree Tree deriving Show
 --
@@ -42,15 +47,6 @@
 -- >>> select trees 12345
 -- B (B (B (B L (B L L)) L) (B L (B (B L L) L))) (B (B L (B L L)) (B (B L L) (B L (B L L))))
 --
--- @
--- natLists :: Enumeration [Integer]
--- natLists = 'infinite' $ 'singleton' [] '<|>' (:) '<$>' 'nat' '<*>' natLists
--- @
---
--- >>> enumerate . takeE 15 $ natLists
--- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
--- >>> select natLists 986235087203970702008108646
--- [11987363624969,1854392,1613,15,0,2,0]
 
 -----------------------------------------------------------------------------
 
@@ -91,6 +87,8 @@ module Data.Enumeration
   , (><)
   , interleave
 
+  , listOf
+
     -- * Utilities
 
   , diagonal
@@ -116,8 +114,6 @@ import           Data.Tuple          (swap)
 --     where t' = treesUpTo (n-1)
 --   trees :: Enumeration Tree
 --   trees = infinite $ singleton L <|> B <$> trees <*> trees
---   natLists :: Enumeration [Integer]
---   natLists = infinite $ singleton [] <|> (:) <$> nat <*> natLists
 -- :}
 
 ------------------------------------------------------------
@@ -628,6 +624,14 @@ e1 >< e2 = case (card e1, card e2) of
     { card = Infinite
     , select = \k -> let (i,j) = diagonal k in (select e1 i, select e2 j)
     }
+
+-- | Enumerate all possible lists containing values from the given enumeration.
+listOf :: Enumeration a -> Enumeration [a]
+listOf e = case card e of
+  Finite 0 -> empty
+  _        -> listOfE
+    where
+      listOfE = infinite $ singleton [] <|> (:) <$> e <*> listOfE
 
 
 -- Note: more efficient integerSqrt in arithmoi
