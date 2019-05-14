@@ -1,15 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.1.
---
--- see: https://github.com/sol/hpack
---
--- hash: e6e21bb6a9305eecf94aaf6d7f0fba8bc53561aeddefc1703dfb29afe635863b
-
 name:           enumeration
 version:        0.1.0.0
-synopsis:       XXX
-description:    XXX
+synopsis:       Finite or countably infinite sequences of values.
+description:    Finite or countably infinite sequences of values,
+                supporting efficient indexing and random sampling.
 homepage:       https://github.com/byorgey/enumeration#readme
 bug-reports:    https://github.com/byorgey/enumeration/issues
 author:         Brent Yorgey
@@ -27,20 +22,16 @@ source-repository head
   location: https://github.com/byorgey/enumeration
 
 library
-  exposed-modules:
-      Data.Enumeration
-  hs-source-dirs:
-      src
-  build-depends:
-      base >=4.7 && <5
-  default-language: Haskell2010
+  exposed-modules:      Data.Enumeration
+  hs-source-dirs:       src
+  build-depends:        base >=4.7 && <5
+  default-language:     Haskell2010
 
-test-suite enumeration-tests
+test-suite doctests
   type: exitcode-stdio-1.0
-  main-is: Tests.hs
+  main-is: doctests.hs
   hs-source-dirs: test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
-    , enumeration
+      base >=4.7 && <5, doctest >= 0.8
   default-language: Haskell2010
