@@ -1,0 +1,46 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: e6e21bb6a9305eecf94aaf6d7f0fba8bc53561aeddefc1703dfb29afe635863b
+
+name:           enumeration
+version:        0.1.0.0
+synopsis:       XXX
+description:    XXX
+homepage:       https://github.com/byorgey/enumeration#readme
+bug-reports:    https://github.com/byorgey/enumeration/issues
+author:         Brent Yorgey
+maintainer:     byorgey@gmail.com
+copyright:      2019 Brent Yorgey
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/byorgey/enumeration
+
+library
+  exposed-modules:
+      Data.Enumeration
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+  default-language: Haskell2010
+
+test-suite enumeration-tests
+  type: exitcode-stdio-1.0
+  main-is: Tests.hs
+  hs-source-dirs: test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , enumeration
+  default-language: Haskell2010
