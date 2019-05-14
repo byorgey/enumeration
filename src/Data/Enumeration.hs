@@ -69,7 +69,6 @@ module Data.Enumeration
 
     -- ** Primitive enumerations
 
-  , void
   , unit
   , singleton
   , always
@@ -200,8 +199,8 @@ instance Applicative Enumeration where
   f <*> x = uncurry ($) <$> (f >< x)
 
 -- | The @Alternative@ instance for @Enumeration@ represents the sum
---   monoidal structure on enumerations: @empty = void@, and
---   @('<|>') = ('<+>')@ is disjoint union.
+--   monoidal structure on enumerations: @empty@ is the empty
+--   enumeration, and @('<|>') = ('<+>')@ is disjoint union.
 instance Alternative Enumeration where
   empty = void
   (<|>) = (<+>)

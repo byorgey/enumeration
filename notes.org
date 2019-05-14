@@ -5,3 +5,4 @@ http://hackage.haskell.org/package/enumerate
 http://hackage.haskell.org/package/enumerate-function
 http://hackage.haskell.org/package/enumerable
 http://hackage.haskell.org/package/size-based
+http://hackage.haskell.org/package/enumeration
