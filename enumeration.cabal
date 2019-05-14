@@ -1,10 +1,11 @@
 cabal-version: 1.12
 
 name:           enumeration
-version:        0.1.0.0
+version:        0.1
 synopsis:       Finite or countably infinite sequences of values.
 description:    Finite or countably infinite sequences of values,
                 supporting efficient indexing and random sampling.
+category:       Data
 homepage:       https://github.com/byorgey/enumeration#readme
 bug-reports:    https://github.com/byorgey/enumeration/issues
 author:         Brent Yorgey
