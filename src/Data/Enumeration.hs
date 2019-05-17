@@ -637,7 +637,7 @@ e1 >< e2 = case (card e1, card e2) of
 -- >>> enumerate $ maybeOf (finiteList [1,2,3])
 -- [Nothing,Just 1,Just 2,Just 3]
 maybeOf :: Enumeration a -> Enumeration (Maybe a)
-maybeOf e = singleton Nothing <|> Just <$> e
+maybeOf a = singleton Nothing <|> Just <$> a
 
 -- | Enumerae all possible values of type @Either a b@ with inner values
 --   taken from the given enumerations.
@@ -645,19 +645,18 @@ maybeOf e = singleton Nothing <|> Just <$> e
 -- >>> enumerate . takeE 6 $ eitherOf nat nat
 -- [Left 0,Right 0,Left 1,Right 1,Left 2,Right 2]
 eitherOf :: Enumeration a -> Enumeration b -> Enumeration (Either a b)
-eitherOf e1 e2 = Left <$> e1 <|> Right <$> e2
+eitherOf a b = Left <$> a <|> Right <$> b
 
 -- | Enumerate all possible lists containing values from the given enumeration.
 --
 -- >>> enumerate . takeE 15 $ listOf nat
 -- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
 listOf :: Enumeration a -> Enumeration [a]
-listOf e = case card e of
+listOf a = case card a of
   Finite 0 -> empty
-  _        -> listOfE
+  _        -> listOfA
     where
-      listOfE = infinite $ singleton [] <|> (:) <$> e <*> listOfE
-
+      listOfA = infinite $ singleton [] <|> (:) <$> a <*> listOfA
 
 -- Note: more efficient integerSqrt in arithmoi
 -- (Math.NumberTheory.Powers.Squares), but it's a rather heavyweight
