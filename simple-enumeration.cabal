@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
-name:           enumeration
+name:           simple-enumeration
 version:        0.1
 synopsis:       Finite or countably infinite sequences of values.
 description:    Finite or countably infinite sequences of values,
