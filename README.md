@@ -11,3 +11,7 @@ Note the goal of this package is *not* to enumerate values of Haskell
 types; there already exist many other packages to do that.  Rather,
 the goal is simply to provide an abstract framework for working with
 enumerations of any values at all.
+
+See the documentation for examples; see the [announcement blog
+post](https://byorgey.wordpress.com/2019/05/14/lightweight-efficiently-sampleable-enumerations-in-haskell/)
+for additional examples and discussion.
