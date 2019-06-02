@@ -248,8 +248,8 @@ void = Enumeration 0 (error "select void")
 -- [()]
 unit :: Enumeration ()
 unit = Enumeration
-  { card = 1
-  , select = \case { 0 -> (); i -> error $ "select unit " ++ show i }
+  { card   = 1
+  , select = const ()
   }
 
 -- | An enumeration of a single given element.
