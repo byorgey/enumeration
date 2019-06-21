@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 
@@ -47,6 +48,9 @@
 -- >>> select trees 12345
 -- B (B (B (B L (B L L)) L) (B L (B (B L L) L))) (B (B L (B L L)) (B (B L L) (B L (B L L))))
 --
+-- For /invertible/ enumerations, /i.e./ bijections between some set
+-- of values and natural numbers (or finite prefix thereof), see
+-- "Data.Enumeration.Invertible".
 
 -----------------------------------------------------------------------------
 
@@ -54,6 +58,7 @@ module Data.Enumeration
   ( -- * Enumerations
 
     Enumeration
+  , mkEnumeration
 
     -- ** Using enumerations
 
@@ -90,6 +95,8 @@ module Data.Enumeration
   , maybeOf
   , eitherOf
   , listOf
+  , finiteSubsetOf
+  , finiteEnumerationOf
 
     -- * Utilities
 
@@ -99,8 +106,12 @@ module Data.Enumeration
 
 import           Control.Applicative
 
+import           Data.Bits              ((.&.))
 import           Data.Ratio
-import           Data.Tuple          (swap)
+import           Data.Tuple             (swap)
+
+import           GHC.Base               (Int (I#))
+import           GHC.Integer.Logarithms (integerLog2#)
 
 ------------------------------------------------------------
 -- Setup for doctest examples
@@ -188,6 +199,11 @@ data Enumeration a = Enumeration
   }
   deriving Functor
 
+-- | Create an enumeration primitively out of a cardinality and an
+--   index function.
+mkEnumeration :: Cardinality -> (Index -> a) -> Enumeration a
+mkEnumeration = Enumeration
+
 -- | The @Applicative@ instance for @Enumeration@ works similarly to
 --   the instance for lists: @pure = singleton@, and @f '<*>' x@ takes
 --   the Cartesian product of @f@ and @x@ (see ('><')) and applies
@@ -221,9 +237,10 @@ isFinite _                          = False
 -- | List the elements of an enumeration in order.  Inverse of
 --   'finiteList'.
 enumerate :: Enumeration a -> [a]
-enumerate e = case card e of
-  Infinite -> map (select e) [0 ..]
-  Finite c -> map (select e) [0 .. c-1]
+enumerate e = map (select e) $
+  case card e of
+    Infinite -> [0 ..]
+    Finite c -> [0 .. c-1]
 
 ------------------------------------------------------------
 -- Constructing Enumerations
@@ -431,7 +448,7 @@ dropE k e
 -- trees = infinite $ singleton L '<|>' B '<$>' trees '<*>' trees
 -- @
 --
---   Trying to use @treeBad@ at all will simply hang, since trying to
+--   Trying to use @treesBad@ at all will simply hang, since trying to
 --   compute its cardinality leads to infinite recursion.
 --
 -- @
@@ -439,7 +456,7 @@ dropE k e
 -- ^CInterrupted.
 -- @
 --
---   However, using 'infinite', as in the definition of 'trees',
+--   However, using 'infinite', as in the definition of @trees@,
 --   provides the needed laziness:
 --
 -- >>> card trees
@@ -477,15 +494,14 @@ infinite (Enumeration _ s) = Enumeration Infinite s
 --   If you want to interleave an infinite enumeration of finite
 --   enumerations, you are out of luck.
 interleave :: Enumeration (Enumeration a) -> Enumeration a
-interleave e = case card e of
-  Finite n -> Enumeration
-    { card   = Infinite
-    , select = \k -> let (i,j) = k `divMod` n in select (select e j) i
-    }
-  Infinite -> Enumeration
-    { card   = Infinite
-    , select = \k -> let (i,j) = diagonal k in select (select e j) i
-    }
+interleave e = Enumeration
+  { card   = Infinite
+  , select = \k ->
+      let (i,j) = case card e of
+            Finite n -> k `divMod` n
+            Infinite -> diagonal k
+      in  select (select e j) i
+  }
 
 -- | Zip two enumerations in parallel, producing the pair of
 --   elements at each index.  The resulting enumeration is truncated
@@ -647,7 +663,7 @@ maybeOf a = singleton Nothing <|> Just <$> a
 eitherOf :: Enumeration a -> Enumeration b -> Enumeration (Either a b)
 eitherOf a b = Left <$> a <|> Right <$> b
 
--- | Enumerate all possible lists containing values from the given enumeration.
+-- | Enumerate all possible finite lists containing values from the given enumeration.
 --
 -- >>> enumerate . takeE 15 $ listOf nat
 -- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
@@ -657,6 +673,57 @@ listOf a = case card a of
   _        -> listOfA
     where
       listOfA = infinite $ singleton [] <|> (:) <$> a <*> listOfA
+
+-- | Enumerate all possible finite subsets of values from the given enumeration.
+--
+-- >>> enumerate $ finiteSubsetOf (finite 3)
+-- [[],[0],[1],[0,1],[2],[0,2],[1,2],[0,1,2]]
+finiteSubsetOf :: Enumeration a -> Enumeration [a]
+finiteSubsetOf as = pick <$> bitstrings
+  where
+    bitstrings = case card as of
+      Infinite -> nat
+      Finite k -> finite (2^k)
+
+    pick 0 = []
+    pick n = select as (integerLog2 l) : pick (n - l)
+      where
+        l = lsb n
+
+    lsb :: Integer -> Integer
+    lsb n = n .&. (-n)
+
+    integerLog2 :: Integer -> Integer
+    integerLog2 n = fromIntegral (I# (integerLog2# n))
+
+-- | @finiteEnumerationOf n a@ creates an enumeration of all sequences
+--   of exactly n items taken from the enumeration @a@.
+finiteEnumerationOf :: Int -> Enumeration a -> Enumeration (Enumeration a)
+finiteEnumerationOf 0 _ = singleton empty
+finiteEnumerationOf n a = case card a of
+  Finite k -> selectEnum k <$> finite (k^n)
+  Infinite -> foldr cons (singleton empty) (replicate n a)
+
+  where
+    selectEnum k = fmap (select a) . finiteList . reverse . take n . toBase k
+
+    toBase _ 0 = repeat 0
+    toBase k n = n `mod` k : toBase k (n `div` k)
+
+    cons :: Enumeration a -> Enumeration (Enumeration a) -> Enumeration (Enumeration a)
+    cons a as = (<|>) <$> (singleton <$> a) <*> as
+
+-- https://mail.haskell.org/pipermail/haskell-cafe/2008-February/039465.html
+-- imLog :: Integer->Integer->Integer
+-- > >   imLog b x
+-- > >     = if x < b then
+-- > >         0
+-- > >       else
+-- > >         let
+-- > >           l = 2 * imLog (b*b) x
+-- > >           doDiv x l = if x < b then l else doDiv (x`div`b) (l+1)
+-- > >         in
+-- > >           doDiv (x`div`(b^l)) l
 
 -- Note: more efficient integerSqrt in arithmoi
 -- (Math.NumberTheory.Powers.Squares), but it's a rather heavyweight

@@ -11,40 +11,151 @@
 -- Copyright   :  Brent Yorgey
 -- Maintainer  :  byorgey@gmail.com
 --
--- XXX invertible, but we lose Functor, Applicative, Alternative.
+-- An /invertible enumeration/ is a bijection between a set of values
+-- and the natural numbers (or a finite prefix thereof), represented
+-- as a pair of inverse functions, one in each direction.  Hence they
+-- support efficient indexing and can be constructed for very large
+-- finite sets.  A few examples are shown below.
 --
--- XXX add locate examples to doctests
-
+-- Compared to "Data.Enumeration", one can also build invertible
+-- enumerations of functions (or other type formers with contravariant
+-- arguments); however, invertible enumerations no longer make for
+-- valid 'Functor', 'Applicative', or 'Alternative' instances.
+--
+-- This module exports many of the same names as "Data.Enumeration";
+-- the expectation is that you will choose one or the other to import,
+-- though of course it is possible to import both if you qualify one
+-- or both of the imports.
+--
 -----------------------------------------------------------------------------
 
-module Data.Enumeration.Invertible where
+module Data.Enumeration.Invertible
+  ( -- * Invertible enumerations
 
-import qualified Data.Enumeration as E
+    IEnumeration
+
+    -- ** Using enumerations
+
+  , Cardinality(..), card
+  , Index, select, locate
+
+  , isFinite
+  , enumerate
+
+    -- ** Primitive enumerations
+
+  , void
+  , unit
+  , singleton
+  , finite
+  , finiteList
+  , boundedEnum
+
+  , nat
+  , int
+  , cw
+  , rat
+
+  -- ** Enumeration combinators
+
+  , mapE
+  , takeE, dropE
+  , zipE
+  , infinite
+  , (<+>)
+  , (><)
+  , interleave
+
+  , maybeOf
+  , eitherOf
+  , listOf
+  , finiteSubsetOf
+  , finiteEnumerationOf
+  , functionOf
+
+  -- * Utilities
+
+  , undiagonal
+  ) where
+
+import           Control.Applicative (Alternative (..))
+import           Data.Bits           (shiftL, (.|.))
+import           Data.List           (findIndex, foldl')
+import           Data.Maybe          (fromJust)
+import           Data.Ratio
+
+import           Data.Enumeration    (Cardinality (..), Enumeration, Index)
+import qualified Data.Enumeration    as E
+
+------------------------------------------------------------
+-- Setup for doctest examples
+------------------------------------------------------------
+
+-- $setup
+-- >>> :set -XTypeApplications
+-- >>> import Control.Arrow ((&&&))
+-- >>> :{
+--   data Tree = L | B Tree Tree deriving Show
+--   treesUpTo :: Int -> IEnumeration Tree
+--   treesUpTo 0 = singleton L
+--   treesUpTo n = mapE toTree fromTree (unit <+> (t' >< t'))
+--     where
+--       t' = treesUpTo (n-1)
+--   trees :: IEnumeration Tree
+--   trees = infinite $ mapE toTree fromTree (unit <+> (trees >< trees))
+--   toTree :: Either () (Tree, Tree) -> Tree
+--   toTree = either (const L) (uncurry B)
+--   fromTree :: Tree -> Either () (Tree, Tree)
+--   fromTree L = Left ()
+--   fromTree (B l r) = Right (l,r)
+-- :}
 
 ------------------------------------------------------------
 -- Invertible enumerations
 ------------------------------------------------------------
 
-data Enumeration a = Enumeration
-  { -- | Get the cardinality of an enumeration.
-    baseEnum :: E.Enumeration a
+-- | An invertible enumeration is a bijection between a set of
+--   enumerated values and the natural numbers or a finite prefix of
+--   the natural numbers.  An invertible enumeration is represented as
+--   a function from natural numbers to values, paired with an inverse
+--   function that returns the natural number index of a given value.
+--   Enumerations can thus easily be constructed for very large sets,
+--   and support efficient indexing and random sampling.
+--
+--   Note that 'IEnumeration' cannot be made an instance of 'Functor',
+--   'Applicative', or 'Alternative'.  However, it does support the
+--   'functionOf' combinator which cannot be supported by
+--   "Data.Enumeration".
+
+data IEnumeration a = IEnumeration
+  { baseEnum :: Enumeration a
+    -- | Compute the index of a particular value in its enumeration.
+    --   Note that the result of 'locate' is only valid when given a
+    --   value which is actually in the range of the enumeration.
   , locate   :: a -> Index
   }
 
--- | XXX
-mapEnum :: (a -> b) -> (b -> a) -> Enumeration a -> Enumeration b
-mapEnum f g (Enumeration e l) = Enumeration (f <$> e) (l . g)
+-- | Map a pair of inverse functions over an invertible enumeration of
+--   @a@ values to turn it into an invertible enumeration of @b@
+--   values.  Because invertible enumerations contain a /bijection/ to
+--   the natural numbers, we really do need both directions of a
+--   bijection between @a@ and @b@ in order to map.  This is why
+--   'IEnumeration' cannot be an instance of 'Functor'.
+mapE :: (a -> b) -> (b -> a) -> IEnumeration a -> IEnumeration b
+mapE f g (IEnumeration e l) = IEnumeration (f <$> e) (l . g)
 
 ------------------------------------------------------------
 -- Using enumerations
 ------------------------------------------------------------
 
--- | XXX
-select :: Enumeration a -> (Index -> a)
+-- | Select the value at a particular index.  Precondition: the index
+--   must be strictly less than the cardinality.  For infinite sets,
+--   every possible value must occur at some finite index.
+select :: IEnumeration a -> (Index -> a)
 select = E.select . baseEnum
 
--- | XXX
-card :: Enumeration a -> Cardinality
+-- | Get the cardinality of an enumeration.
+card :: IEnumeration a -> Cardinality
 card = E.card . baseEnum
 
 -- | Test whether an enumeration is finite.
@@ -54,13 +165,12 @@ card = E.card . baseEnum
 --
 -- >>> isFinite nat
 -- False
-isFinite :: Enumeration a -> Bool
-isFinite (Enumeration (Finite _) _) = True
-isFinite _                          = False
+isFinite :: IEnumeration a -> Bool
+isFinite (IEnumeration e _) = E.isFinite e
 
 -- | List the elements of an enumeration in order.  Inverse of
 --   'finiteList'.
-enumerate :: Enumeration a -> [a]
+enumerate :: IEnumeration a -> [a]
 enumerate e = case card e of
   Infinite -> map (select e) [0 ..]
   Finite c -> map (select e) [0 .. c-1]
@@ -76,8 +186,8 @@ enumerate e = case card e of
 --
 -- >>> enumerate void
 -- []
-void :: Enumeration a
-void = Enumeration E.void (error "locate void")
+void :: IEnumeration a
+void = IEnumeration empty (error "locate void")
 
 -- | The unit enumeration, with a single value of @()@.
 --
@@ -86,8 +196,11 @@ void = Enumeration E.void (error "locate void")
 --
 -- >>> enumerate unit
 -- [()]
-unit :: Enumeration ()
-unit = Enumeration E.unit (const 0)
+--
+-- >>> locate unit ()
+-- 0
+unit :: IEnumeration ()
+unit = IEnumeration E.unit (const 0)
 
 -- | An enumeration of a single given element.
 --
@@ -96,8 +209,11 @@ unit = Enumeration E.unit (const 0)
 --
 -- >>> enumerate (singleton 17)
 -- [17]
-singleton :: a -> Enumeration a
-singleton a = Enumeration (E.singleton a) (const 0)
+--
+-- >>> locate (singleton 17) 17
+-- 0
+singleton :: a -> IEnumeration a
+singleton a = IEnumeration (E.singleton a) (const 0)
 
 -- | A finite prefix of the natural numbers.
 --
@@ -110,8 +226,8 @@ singleton a = Enumeration (E.singleton a) (const 0)
 -- [0,1,2,3,4]
 -- >>> enumerate (finite 0)
 -- []
-finite :: Integer -> Enumeration Integer
-finite n = Enumeration (E.finite n) id
+finite :: Integer -> IEnumeration Integer
+finite n = IEnumeration (E.finite n) id
 
 -- | Construct an enumeration from the elements of a /finite/ list.
 --   The elements of the list must all be distinct. To turn an
@@ -121,6 +237,8 @@ finite n = Enumeration (E.finite n) id
 -- [2,3,8,1]
 -- >>> select (finiteList [2,3,8,1]) 2
 -- 8
+-- >>> locate (finiteList [2,3,8,1]) 8
+-- 2
 --
 --   'finiteList' does not work on infinite lists: inspecting the
 --   cardinality of the resulting enumeration (something many of the
@@ -133,14 +251,17 @@ finite n = Enumeration (E.finite n) id
 --   indexing performance by allocating a vector internally, but I am
 --   too lazy to do it.  If you have a good use case let me know
 --   (better yet, submit a pull request).
-finiteList :: [a] -> Enumeration a
-finiteList as = Enumeration (E.finiteList as) (\a -> findIndex (==a) as)
+finiteList :: Eq a => [a] -> IEnumeration a
+finiteList as = IEnumeration (E.finiteList as) locateFinite
   -- Note the use of !! and findIndex is not very efficient, but for
   -- small lists it probably still beats the overhead of allocating a
   -- vector.  Most likely this will only ever be used with very small
   -- lists anyway.  If it becomes a problem we could add another
   -- combinator that behaves just like finiteList but allocates a
   -- Vector internally.
+
+  where
+    locateFinite a = fromIntegral . fromJust $ findIndex (==a) as
 
 -- | Enumerate all the values of a bounded 'Enum' instance.
 --
@@ -154,8 +275,8 @@ finiteList as = Enumeration (E.finiteList as) (\a -> findIndex (==a) as)
 -- Finite 18446744073709551616
 -- >>> select (boundedEnum @Int) 0
 -- -9223372036854775808
-boundedEnum :: forall a. (Enum a, Bounded a) => Enumeration a
-boundedEnum = Enumeration E.boundedEnum (subtract lo . fromEnum)
+boundedEnum :: forall a. (Enum a, Bounded a) => IEnumeration a
+boundedEnum = IEnumeration E.boundedEnum (subtract lo . fromIntegral . fromEnum)
   where
     lo :: Index
     lo = fromIntegral (fromEnum (minBound @a))
@@ -164,12 +285,12 @@ boundedEnum = Enumeration E.boundedEnum (subtract lo . fromEnum)
 --
 -- >>> enumerate . takeE 10 $ nat
 -- [0,1,2,3,4,5,6,7,8,9]
-nat :: Enumeration Integer
-nat = Enumeration E.nat id
+nat :: IEnumeration Integer
+nat = IEnumeration E.nat id
 
 -- | All integers in the order @0, 1, -1, 2, -2, 3, -3, ...@.
-int :: Enumeration Integer
-int = Enumeration E.int locateInt
+int :: IEnumeration Integer
+int = IEnumeration E.int locateInt
   where
     locateInt z
       | z <= 0    = 2 * abs z
@@ -180,23 +301,35 @@ int = Enumeration E.int locateInt
 --
 -- >>> enumerate . takeE 10 $ cw
 -- [1 % 1,1 % 2,2 % 1,1 % 3,3 % 2,2 % 3,3 % 1,1 % 4,4 % 3,3 % 5]
-cw :: Enumeration Rational
-cw = Enumeration E.cw (pred . locateCW)
+-- >>> locate cw (3 % 2)
+-- 4
+-- >>> locate cw (23 % 99)
+-- 3183
+cw :: IEnumeration Rational
+cw = IEnumeration E.cw (pred . locateCW)
   where
     locateCW r = go (numerator r, denominator r)
     go (1,1) = 1
     go (a,b)
-      | a < b     = 2^(b `div` a) * go (a, b `mod` a)
-      | otherwise = 2^(a `div` b) * go (a `mod` b, b) - 1
+      | a < b     = 2 * go (a, b - a)
+      | otherwise = 1 + 2 * go (a - b, b)
 
 -- | An enumeration of all rational numbers: 0 first, then each
 --   rational in the Calkin-Wilf sequence followed by its negative.
 --
 -- >>> enumerate . takeE 10 $ rat
 -- [0 % 1,1 % 1,(-1) % 1,1 % 2,(-1) % 2,2 % 1,(-2) % 1,1 % 3,(-1) % 3,3 % 2]
-rat :: Enumeration Rational
--- rat = singleton 0 <+> (cw <+> negate <$> cw)
-rat = undefined
+
+rat :: IEnumeration Rational
+rat = mapE
+  (either (const 0) (either id negate))
+  unrat
+  (unit <+> (cw <+> cw))
+  where
+    unrat 0 = Left ()
+    unrat r
+      | r > 0     = Right (Left r)
+      | otherwise = Right (Right (-r))
 
 -- | Take a finite prefix from the beginning of an enumeration.  @takeE
 --   k e@ always yields the empty enumeration for \(k \leq 0\), and
@@ -215,8 +348,8 @@ rat = undefined
 --
 -- >>> enumerate $ takeE 7 (finiteList [1..5])
 -- [1,2,3,4,5]
-takeE :: Integer -> Enumeration a -> Enumeration a
-takeE k e = Enumeration (E.takeE k e) (locate e)
+takeE :: Integer -> IEnumeration a -> IEnumeration a
+takeE k (IEnumeration e l) = IEnumeration (E.takeE k e) l
 
 -- | Drop some elements from the beginning of an enumeration.  @dropE k
 --   e@ yields @e@ unchanged if \(k \leq 0\), and results in the empty
@@ -231,8 +364,8 @@ takeE k e = Enumeration (E.takeE k e) (locate e)
 --
 -- >>> enumerate $ dropE 7 (finiteList [1..5])
 -- []
-dropE :: Integer -> Enumeration a -> Enumeration a
-dropE k e = Enumeration (E.dropE k e) (subtract (max 0 k) . locate e)
+dropE :: Integer -> IEnumeration a -> IEnumeration a
+dropE k (IEnumeration e l) = IEnumeration (E.dropE k e) (subtract (max 0 k) . l)
 
 -- | Explicitly mark an enumeration as having an infinite cardinality,
 --   ignoring the previous cardinality. It is sometimes necessary to
@@ -245,14 +378,21 @@ dropE k e = Enumeration (E.dropE k e) (subtract (max 0 k) . locate e)
 -- @
 -- data Tree = L | B Tree Tree deriving Show
 --
--- treesBad :: Enumeration Tree
--- treesBad = singleton L '<|>' B '<$>' treesBad '<*>' treesBad
+-- toTree :: Either () (Tree, Tree) -> Tree
+-- toTree = either (const L) (uncurry B)
 --
--- trees :: Enumeration Tree
--- trees = infinite $ singleton L '<|>' B '<$>' trees '<*>' trees
+-- fromTree :: Tree -> Either () (Tree, Tree)
+-- fromTree L       = Left ()
+-- fromTree (B l r) = Right (l,r)
+--
+-- treesBad :: IEnumeration Tree
+-- treesBad = mapE toTree fromTree (unit '<+>' (treesBad '><' treesBad))
+--
+-- trees :: IEnumeration Tree
+-- trees = infinite $ mapE toTree fromTree (unit '<+>' (trees '><' trees))
 -- @
 --
---   Trying to use @treeBad@ at all will simply hang, since trying to
+--   Trying to use @treesBad@ at all will simply hang, since trying to
 --   compute its cardinality leads to infinite recursion.
 --
 -- @
@@ -260,7 +400,7 @@ dropE k e = Enumeration (E.dropE k e) (subtract (max 0 k) . locate e)
 -- ^CInterrupted.
 -- @
 --
---   However, using 'infinite', as in the definition of 'trees',
+--   However, using 'infinite', as in the definition of @trees@,
 --   provides the needed laziness:
 --
 -- >>> card trees
@@ -269,12 +409,15 @@ dropE k e = Enumeration (E.dropE k e) (subtract (max 0 k) . locate e)
 -- [L,B L L,B L (B L L)]
 -- >>> select trees 87239862967296
 -- B (B (B (B (B L L) (B (B (B L L) L) L)) (B L (B L (B L L)))) (B (B (B L (B L (B L L))) (B (B L L) (B L L))) (B (B L (B L (B L L))) L))) (B (B L (B (B (B L (B L L)) (B L L)) L)) (B (B (B L (B L L)) L) L))
-infinite :: Enumeration a -> Enumeration a
-infinite (Enumeration e l) = Enumeration (E.infinite e) l
+-- >>> select trees 123
+-- B (B L (B L L)) (B (B L (B L L)) (B L (B L L)))
+-- >>> locate trees (B (B L (B L L)) (B (B L (B L L)) (B L (B L L))))
+-- 123
+
+infinite :: IEnumeration a -> IEnumeration a
+infinite (IEnumeration e l) = IEnumeration (E.infinite e) l
 
 -- | Fairly interleave a set of /infinite/ enumerations.
---
---   XXX explain paired index
 --
 --   For a finite set of infinite enumerations, a round-robin
 --   interleaving is used. That is, if we think of an enumeration of
@@ -283,55 +426,54 @@ infinite (Enumeration e l) = Enumeration (E.infinite e) l
 --   rows, turning it into one with infinitely many finite rows.  For
 --   an infinite set of infinite enumerations, /i.e./ an infinite 2D
 --   matrix, the resulting enumeration reads off the matrix by
---   'diagonal's.
+--   'Data.Enumeration.diagonal's.
 --
--- >>> enumerate . takeE 15 $ interleave (finiteList [nat, negate <$> nat, (*10) <$> nat])
--- [0,0,0,1,-1,10,2,-2,20,3,-3,30,4,-4,40]
---
--- >>> enumerate . takeE 15 $ interleave (always nat)
--- [0,0,1,0,1,2,0,1,2,3,0,1,2,3,4]
---
---   This function is similar to 'Control.Monad.join' in a
---   hypothetical 'Monad' instance for 'Enumeration', but it only
---   works when the inner enumerations are all infinite.
---
---   To interleave a finite enumeration of enumerations, some of which
---   may be finite, you can use @'Data.Foldable.asum' . 'enumerate'@.
---   If you want to interleave an infinite enumeration of finite
---   enumerations, you are out of luck.
-interleave :: Enumeration (Enumeration a) -> Enumeration (Index, a)
-interleave e =
+--   Note that the type of this function is slightly different than
+--   its counterpart in "Data.Enumeration": each enumerated value in
+--   the output is tagged with an index indicating which input
+--   enumeration it came from.  This is required to make the result
+--   invertible, and is analogous to the way the output values of
+--   '<+>' are tagged with 'Left' or 'Right'; in fact, 'interleave'
+--   can be thought of as an iterated version of '<+>', but with a
+--   more efficient implementation.
 
-  -- case card e of
-  -- Finite n -> Enumeration
-  --   { card   = Infinite
-  --   , select = \k -> let (i,j) = k `divMod` n in select (select e j) i
-  --   }
-  -- Infinite -> Enumeration
-  --   { card   = Infinite
-  --   , select = \k -> let (i,j) = diagonal k in select (select e j) i
-  --   }
+interleave :: IEnumeration (IEnumeration a) -> IEnumeration (Index, a)
+interleave e = IEnumeration
+  { baseEnum = E.mkEnumeration Infinite $ \k ->
+      let (i,j) = case card e of
+            Finite n -> k `divMod` n
+            Infinite -> E.diagonal k
+      in  (j, select (select e j) i)
+  , locate   = \(j, a) ->
+      let i = locate (select e j) a
+      in  case card e of
+            Finite n -> i*n + j
+            Infinite -> undiagonal (i,j)
+  }
 
 -- | Zip two enumerations in parallel, producing the pair of
 --   elements at each index.  The resulting enumeration is truncated
 --   to the cardinality of the smaller of the two arguments.
 --
+--   Note that defining @zipWithE@ as in "Data.Enumeration" is not
+--   possible since there would be no way to invert it in general.
+--   However, one can use 'zipE' in combination with 'mapE' to achieve
+--   a similar result.
+--
 -- >>> enumerate $ zipE nat (boundedEnum @Bool)
 -- [(0,False),(1,True)]
-zipE :: Enumeration a -> Enumeration b -> Enumeration (a,b)
-zipE = zipWithE (,)
-
--- | Zip two enumerations in parallel, applying the given function to
---   the pair of elements at each index to produce a new element.  The
---   resulting enumeration is truncated to the cardinality of the
---   smaller of the two arguments.
 --
--- >>> enumerate $ zipWithE replicate (finiteList [1..10]) (dropE 35 (boundedEnum @Char))
+-- >>> cs = mapE (uncurry replicate) (length &&& head) (zipE (finiteList [1..10]) (dropE 35 (boundedEnum @Char)))
+-- >>> enumerate cs
 -- ["#","$$","%%%","&&&&","'''''","((((((",")))))))","********","+++++++++",",,,,,,,,,,"]
+-- >>> locate cs "********"
+-- 7
 
-zipWithE :: (a -> b -> c) -> Enumeration a -> Enumeration b -> Enumeration c
-zipWithE f e1 e2 =
-  Enumeration (min (card e1) (card e2)) (\k -> f (select e1 k) (select e2 k))
+zipE :: IEnumeration a -> IEnumeration b -> IEnumeration (a,b)
+zipE ea eb = IEnumeration
+  { baseEnum = E.zipE (baseEnum ea) (baseEnum eb)
+  , locate   = locate ea . fst
+  }
 
 -- | Sum, /i.e./ disjoint union, of two enumerations.  If both are
 --   finite, all the values of the first will be enumerated before the
@@ -340,63 +482,36 @@ zipWithE f e1 e2 =
 --   fair (alternating) interleaving is used, so that every value ends
 --   up at a finite index in the result.
 --
---   Note that the ('<+>') operator is a synonym for ('<|>') from the
---   'Alternative' instance for 'Enumeration', which should be used in
---   preference to ('<+>').  ('<+>') is provided as a separate
---   standalone operator to make it easier to document.
+--   Note that this has a different type than the version in
+--   "Data.Enumeration".  Here we require the output to carry an
+--   explicit 'Either' tag to make it invertible.
 --
--- >>> enumerate . takeE 10 $ singleton 17 <|> nat
--- [17,0,1,2,3,4,5,6,7,8]
+-- >>> enumerate . takeE 5 $ singleton 17 <+> nat
+-- [Left 17,Right 0,Right 1,Right 2,Right 3]
 --
--- >>> enumerate . takeE 10 $ nat <|> singleton 17
--- [17,0,1,2,3,4,5,6,7,8]
+-- >>> enumerate . takeE 5 $ nat <+> singleton 17
+-- [Right 17,Left 0,Left 1,Left 2,Left 3]
 --
--- >>> enumerate . takeE 10 $ nat <|> (negate <$> nat)
--- [0,0,1,-1,2,-2,3,-3,4,-4]
+-- >>> enumerate . takeE 5 $ nat <+> nat
+-- [Left 0,Right 0,Left 1,Right 1,Left 2]
 --
---   Note that this is not associative in a strict sense.  In
---   particular, it may fail to be associative when mixing finite and
---   infinite enumerations:
---
--- >>> enumerate . takeE 10 $ nat <|> (singleton 17 <|> nat)
--- [0,17,1,0,2,1,3,2,4,3]
---
--- >>> enumerate . takeE 10 $ (nat <|> singleton 17) <|> nat
--- [17,0,0,1,1,2,2,3,3,4]
---
--- However, it is associative in several weaker senses:
---
---   * If all the enumerations are finite
---   * If all the enumerations are infinite
---   * If enumerations are considered equivalent up to reordering
---     (they are not, but considering them so may be acceptable in
---     some applications).
-(<+>) :: Enumeration a -> Enumeration a -> Enumeration a
-e1 <+> e2 = case (card e1, card e2) of
+-- >>> locate (nat <+> nat) (Right 35)
+-- 71
 
-  -- optimize for void <+> e2.
-  (Finite 0, _)  -> e2
+(<+>) :: IEnumeration a -> IEnumeration b -> IEnumeration (Either a b)
+a <+> b = IEnumeration (Left <$> baseEnum a <|> Right <$> baseEnum b) (locateEither a b)
+  where
+    locateEither :: IEnumeration a -> IEnumeration b -> (Either a b -> Index)
+    locateEither a b = case (card a, card b) of
+      (Finite k1, _) -> either (locate a) ((+k1) . locate b)
+      (_, Finite k2) -> either ((+k2) . locate a) (locate b)
+      _              -> either ((*2) . locate a) (succ . (*2) . locate b)
 
-  -- Note we don't want to add a case for e1 <+> void right away since
-  -- that would require forcing the cardinality of e2, and we'd rather
-  -- let the following case work lazily in the cardinality of e2.
 
-  -- First enumeration is finite: just put it first
-  (Finite k1, _) -> Enumeration
-    { card   = card e1 + card e2
-    , select = \k -> if k < k1 then select e1 k else select e2 (k - k1)
-    }
-
-  -- First is infinite but second is finite: put all the second values first
-  (_, Finite _) -> e2 <+> e1
-
-  -- Both are infinite: use a fair (alternating) interleaving
-  _ -> interleave (Enumeration 2 (\case {0 -> e1; 1 -> e2}))
-
--- | One half of the isomorphism between \(\mathbb{N}\) and
+-- | The other half of the isomorphism between \(\mathbb{N}\) and
 --   \(\mathbb{N} \times \mathbb{N}\) which enumerates by diagonals:
---   turn a particular natural number index into its position in the
---   2D grid.  That is, given this numbering of a 2D grid:
+--   turn a pair of natural numbers giving a position in the 2D grid
+--   into the number in the cell, according to this numbering scheme:
 --
 --   @
 --   0 1 3 6 ...
@@ -404,19 +519,14 @@ e1 <+> e2 = case (card e1, card e2) of
 --   5 8
 --   9
 --   @
---
---   'diagonal' maps \(0 \mapsto (0,0), 1 \mapsto (0,1), 2 \mapsto (1,0) \dots\)
-diagonal :: Integer -> (Integer, Integer)
-diagonal k = (k - t, d - (k - t))
-  where
-    d = (integerSqrt (1 + 8*k) - 1) `div` 2
-    t = d*(d+1) `div` 2
+undiagonal :: (Integer, Integer) -> Integer
+undiagonal (r,c) = (r+c) * (r+c+1) `div` 2 + r
 
 -- | Cartesian product of enumerations. If both are finite, uses a
 --   simple lexicographic ordering.  If only one is finite, the
 --   resulting enumeration is still in lexicographic order, with the
 --   infinite enumeration as the most significant component.  For two
---   infinite enumerations, uses a fair 'diagonal' interleaving.
+--   infinite enumerations, uses a fair 'Data.Enumeration.diagonal' interleaving.
 --
 -- >>> enumerate $ finiteList [1..3] >< finiteList "abcd"
 -- [(1,'a'),(1,'b'),(1,'c'),(1,'d'),(2,'a'),(2,'b'),(2,'c'),(2,'d'),(3,'a'),(3,'b'),(3,'c'),(3,'d')]
@@ -430,27 +540,21 @@ diagonal k = (k - t, d - (k - t))
 -- >>> enumerate . takeE 10 $ nat >< nat
 -- [(0,0),(0,1),(1,0),(0,2),(1,1),(2,0),(0,3),(1,2),(2,1),(3,0)]
 --
+-- >>> locate (nat >< nat) (1,1)
+-- 4
+-- >>> locate (nat >< nat) (36,45)
+-- 3357
+--
 --   Like ('<+>'), this operation is also not associative (not even up
 --   to reassociating tuples).
-(><) :: Enumeration a -> Enumeration b -> Enumeration (a,b)
-e1 >< e2 = case (card e1, card e2) of
-
-  -- The second enumeration is finite: use lexicographic ordering with
-  -- the first as the most significant component
-  (_, Finite k2) -> Enumeration
-    { card   = card e1 * card e2
-    , select = \k -> let (i,j) = k `divMod` k2 in (select e1 i, select e2 j)
-    }
-
-  -- The first is finite but the second is infinite: lexicographic
-  -- with the second as most significant.
-  (Finite _, _) -> swap <$> (e2 >< e1)
-
-  -- Both are infinite: enumerate by diagonals
-  _ -> Enumeration
-    { card = Infinite
-    , select = \k -> let (i,j) = diagonal k in (select e1 i, select e2 j)
-    }
+(><) :: IEnumeration a -> IEnumeration b -> IEnumeration (a,b)
+a >< b = IEnumeration (baseEnum a E.>< baseEnum b) (locatePair a b)
+  where
+    locatePair :: IEnumeration a -> IEnumeration b -> ((a,b) -> Index)
+    locatePair a b = case (card a, card b) of
+      (_, Finite k2) -> \(x,y) -> k2 * locate a x + locate b y
+      (Finite k1, _) -> \(x,y) -> k1 * locate b y + locate a x
+      _              -> \(x,y) -> undiagonal (locate a x, locate b y)
 
 ------------------------------------------------------------
 -- Building standard data types
@@ -461,45 +565,88 @@ e1 >< e2 = case (card e1, card e2) of
 --
 -- >>> enumerate $ maybeOf (finiteList [1,2,3])
 -- [Nothing,Just 1,Just 2,Just 3]
-maybeOf :: Enumeration a -> Enumeration (Maybe a)
-maybeOf a = singleton Nothing <|> Just <$> a
+maybeOf :: IEnumeration a -> IEnumeration (Maybe a)
+maybeOf a = mapE (either (const Nothing) Just) (maybe (Left ()) Right) (unit <+> a)
 
 -- | Enumerae all possible values of type @Either a b@ with inner values
 --   taken from the given enumerations.
 --
+--   Note that for invertible enumerations, 'eitherOf' is simply a
+--   synonym for '<+>'.
+--
 -- >>> enumerate . takeE 6 $ eitherOf nat nat
 -- [Left 0,Right 0,Left 1,Right 1,Left 2,Right 2]
-eitherOf :: Enumeration a -> Enumeration b -> Enumeration (Either a b)
-eitherOf a b = Left <$> a <|> Right <$> b
+eitherOf :: IEnumeration a -> IEnumeration b -> IEnumeration (Either a b)
+eitherOf = (<+>)
 
--- | Enumerate all possible lists containing values from the given enumeration.
+-- | Enumerate all possible finite lists containing values from the
+-- given enumeration.
 --
 -- >>> enumerate . takeE 15 $ listOf nat
 -- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
-listOf :: Enumeration a -> Enumeration [a]
+listOf :: IEnumeration a -> IEnumeration [a]
 listOf a = case card a of
-  Finite 0 -> empty
+  Finite 0 -> singleton []
   _        -> listOfA
     where
-      listOfA = infinite $ singleton [] <|> (:) <$> a <*> listOfA
+      listOfA = infinite $
+        mapE (either (const []) (uncurry (:))) uncons (unit <+> (a >< listOfA))
+      uncons []     = Left ()
+      uncons (a:as) = Right (a, as)
 
--- Note: more efficient integerSqrt in arithmoi
--- (Math.NumberTheory.Powers.Squares), but it's a rather heavyweight
--- dependency to pull in just for this.
+-- | Enumerate all possible finite subsets of values from the given
+--   enumeration.  The elements in each list will always occur in
+--   increasing order of their index in the given enumeration.
+--
+-- >>> enumerate $ finiteSubsetOf (finite 3)
+-- [[],[0],[1],[0,1],[2],[0,2],[1,2],[0,1,2]]
+--
+-- >>> locate (finiteSubsetOf nat) [2,3,6,8]
+-- 332
+-- >>> 332 == 2^8 + 2^6 + 2^3 + 2^2
+-- True
+finiteSubsetOf :: IEnumeration a -> IEnumeration [a]
+finiteSubsetOf a = IEnumeration (E.finiteSubsetOf (baseEnum a)) unpick
+  where
+    unpick = foldl' (.|.) 0 . map ((1 `shiftL`) . fromIntegral . locate a)
 
--- Implementation of `integerSqrt` taken from the Haskell wiki:
--- https://wiki.haskell.org/Generic_number_type#squareRoot
-integerSqrt :: Integer -> Integer
-integerSqrt 0 = 0
-integerSqrt 1 = 1
-integerSqrt n =
-  let twopows = iterate (^!2) 2
-      (lowerRoot, lowerN) =
-        last $ takeWhile ((n>=) . snd) $ zip (1:twopows) twopows
-      newtonStep x = div (x + div n x) 2
-      iters = iterate newtonStep (integerSqrt (div n lowerN ) * lowerRoot)
-      isRoot r = r^!2 <= n && n < (r+1)^!2
-  in  head $ dropWhile (not . isRoot) iters
+-- | @finiteEnumerationOf n a@ creates an enumeration of all sequences
+--   of exactly n items taken from the enumeration @a@.
+--
+-- >>> map E.enumerate . take 10 . enumerate $ finiteEnumerationOf 3 nat
+-- [[0,0,0],[0,0,1],[1,0,0],[0,1,0],[1,0,1],[2,0,0],[0,0,2],[1,1,0],[2,0,1],[3,0,0]]
+finiteEnumerationOf :: Int -> IEnumeration a -> IEnumeration (Enumeration a)
+finiteEnumerationOf 0 _ = singleton empty
+finiteEnumerationOf n a = case card a of
+  Finite k -> IEnumeration (E.finiteEnumerationOf n (baseEnum a)) (locateEnum k)
+  Infinite -> foldr prod (singleton empty) (replicate n a)
 
-(^!) :: Num a => a -> Int -> a
-(^!) x n = x^n
+  where
+    locateEnum k = fromBase k . reverse . E.enumerate . fmap (locate a)
+
+    fromBase k = foldr (\d r -> d + k*r) 0
+
+    prod :: IEnumeration a -> IEnumeration (Enumeration a) -> IEnumeration (Enumeration a)
+    prod a as = mapE (\(a,e) -> E.singleton a <|> e) (\e -> (E.select e 0, E.dropE 1 e))
+                  (a >< as)
+
+-- | @functionOf a b@ creates an enumeration of all functions taking
+--   values from the enumeration @a@ and returning values from the
+--   enumeration @b@.  As a precondition, @a@ must be finite;
+--   otherwise @functionOf@ throws an error.
+--
+-- >>> bbs = functionOf (boundedEnum @Bool) (boundedEnum @Bool)
+-- >>> card bbs
+-- Finite 4
+-- >>> map (select bbs 2) [False, True]
+-- [True,False]
+-- >>> locate bbs not
+-- 2
+functionOf :: IEnumeration a -> IEnumeration b -> IEnumeration (a -> b)
+functionOf as bs = case card as of
+  Infinite -> error "functionOf with infinite domain"
+  Finite n -> mapE toFunc fromFunc (finiteEnumerationOf (fromIntegral n) bs)
+
+  where
+    toFunc bTuple a = E.select bTuple (locate as a)
+    fromFunc f = f <$> baseEnum as
