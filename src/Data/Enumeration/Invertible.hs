@@ -24,8 +24,8 @@
 --
 -- This module exports many of the same names as "Data.Enumeration";
 -- the expectation is that you will choose one or the other to import,
--- though of course it is possible to import both if you qualify one
--- or both of the imports.
+-- though of course it is possible to import both if you qualify the
+-- imports.
 --
 -----------------------------------------------------------------------------
 
@@ -115,7 +115,7 @@ import qualified Data.Enumeration    as E
 ------------------------------------------------------------
 
 -- | An invertible enumeration is a bijection between a set of
---   enumerated values and the natural numbers or a finite prefix of
+--   enumerated values and the natural numbers, or a finite prefix of
 --   the natural numbers.  An invertible enumeration is represented as
 --   a function from natural numbers to values, paired with an inverse
 --   function that returns the natural number index of a given value.
@@ -149,8 +149,7 @@ mapE f g (IEnumeration e l) = IEnumeration (f <$> e) (l . g)
 ------------------------------------------------------------
 
 -- | Select the value at a particular index.  Precondition: the index
---   must be strictly less than the cardinality.  For infinite sets,
---   every possible value must occur at some finite index.
+--   must be strictly less than the cardinality.
 select :: IEnumeration a -> (Index -> a)
 select = E.select . baseEnum
 
@@ -189,7 +188,7 @@ enumerate e = case card e of
 void :: IEnumeration a
 void = IEnumeration empty (error "locate void")
 
--- | The unit enumeration, with a single value of @()@.
+-- | The unit enumeration, with a single value of @()@ at index 0.
 --
 -- >>> card unit
 -- Finite 1
@@ -202,7 +201,7 @@ void = IEnumeration empty (error "locate void")
 unit :: IEnumeration ()
 unit = IEnumeration E.unit (const 0)
 
--- | An enumeration of a single given element.
+-- | An enumeration of a single given element at index 0.
 --
 -- >>> card (singleton 17)
 -- Finite 1
@@ -226,6 +225,9 @@ singleton a = IEnumeration (E.singleton a) (const 0)
 -- [0,1,2,3,4]
 -- >>> enumerate (finite 0)
 -- []
+--
+-- >>> locate (finite 5) 2
+-- 2
 finite :: Integer -> IEnumeration Integer
 finite n = IEnumeration (E.finite n) id
 
@@ -246,7 +248,7 @@ finite n = IEnumeration (E.finite n) id
 --   the length of the infinite list.
 --
 --   'finiteList' uses ('!!') and 'findIndex' internally (which both
---   take O(n) time), so you probably want to avoid using it on long
+--   take $O(n)$ time), so you probably want to avoid using it on long
 --   lists.  It would be possible to make a version with better
 --   indexing performance by allocating a vector internally, but I am
 --   too lazy to do it.  If you have a good use case let me know
@@ -270,6 +272,8 @@ finiteList as = IEnumeration (E.finiteList as) locateFinite
 --
 -- >>> select (boundedEnum @Char) 97
 -- 'a'
+-- >>> locate (boundedEnum @Char) 'Z'
+-- 90
 --
 -- >>> card (boundedEnum @Int)
 -- Finite 18446744073709551616
@@ -319,6 +323,8 @@ cw = IEnumeration E.cw (pred . locateCW)
 --
 -- >>> enumerate . takeE 10 $ rat
 -- [0 % 1,1 % 1,(-1) % 1,1 % 2,(-1) % 2,2 % 1,(-2) % 1,1 % 3,(-1) % 3,3 % 2]
+-- >>> locate rat (-45 % 61)
+-- 2540
 
 rat :: IEnumeration Rational
 rat = mapE
@@ -565,6 +571,8 @@ a >< b = IEnumeration (baseEnum a E.>< baseEnum b) (locatePair a b)
 --
 -- >>> enumerate $ maybeOf (finiteList [1,2,3])
 -- [Nothing,Just 1,Just 2,Just 3]
+-- >>> locate (maybeOf (maybeOf (finiteList [1,2,3]))) (Just (Just 2))
+-- 3
 maybeOf :: IEnumeration a -> IEnumeration (Maybe a)
 maybeOf a = mapE (either (const Nothing) Just) (maybe (Left ()) Right) (unit <+> a)
 
@@ -584,6 +592,8 @@ eitherOf = (<+>)
 --
 -- >>> enumerate . takeE 15 $ listOf nat
 -- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
+-- >>> locate (listOf nat) [3,4,20,5,19]
+-- 666270815854068922513792635440014
 listOf :: IEnumeration a -> IEnumeration [a]
 listOf a = case card a of
   Finite 0 -> singleton []
@@ -612,6 +622,9 @@ finiteSubsetOf a = IEnumeration (E.finiteSubsetOf (baseEnum a)) unpick
 
 -- | @finiteEnumerationOf n a@ creates an enumeration of all sequences
 --   of exactly n items taken from the enumeration @a@.
+--
+-- >>> map E.enumerate . enumerate $ finiteEnumerationOf 2 (finite 3)
+-- [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]
 --
 -- >>> map E.enumerate . take 10 . enumerate $ finiteEnumerationOf 3 nat
 -- [[0,0,0],[0,0,1],[1,0,0],[0,1,0],[1,0,1],[2,0,0],[0,0,2],[1,1,0],[2,0,1],[3,0,0]]
@@ -642,6 +655,9 @@ finiteEnumerationOf n a = case card a of
 -- [True,False]
 -- >>> locate bbs not
 -- 2
+--
+-- >>> locate (functionOf bbs (boundedEnum @Bool)) (\f -> f True)
+-- 5
 functionOf :: IEnumeration a -> IEnumeration b -> IEnumeration (a -> b)
 functionOf as bs = case card as of
   Infinite -> error "functionOf with infinite domain"
