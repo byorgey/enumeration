@@ -1,3 +1,5 @@
+![CI](https://github.com/byorgey/enumeration/workflows/CI/badge.svg)
+
 # Lightweight, efficiently indexable enumerations
 
 This package defines a type of *enumerations*, along with combinators
