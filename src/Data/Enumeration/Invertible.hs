@@ -646,7 +646,12 @@ finiteEnumerationOf n a = case card a of
 -- | @functionOf a b@ creates an enumeration of all functions taking
 --   values from the enumeration @a@ and returning values from the
 --   enumeration @b@.  As a precondition, @a@ must be finite;
---   otherwise @functionOf@ throws an error.
+--   otherwise @functionOf@ throws an error. There are two exceptions:
+--   first, if @b@ has cardinality 1, we get an enumeration of exactly
+--   one function which constantly returns the one element of @b@,
+--   even if @a@ is infinite.  Second, if @b@ has cardinality 0, we
+--   get a singleton enumeration if @a@ also has cardinality 0, and an
+--   empty enumeration otherwise (even if @a@ is infinite).
 --
 -- >>> bbs = functionOf (boundedEnum @Bool) (boundedEnum @Bool)
 -- >>> card bbs
@@ -658,10 +663,28 @@ finiteEnumerationOf n a = case card a of
 --
 -- >>> locate (functionOf bbs (boundedEnum @Bool)) (\f -> f True)
 -- 5
+--
+-- >>> n2u = functionOf nat unit
+-- >>> card n2u
+-- Finite 1
+-- >>> (select n2u 0) 57
+-- ()
+--
+-- >>> n2o = functionOf nat void
+-- >>> card n2o
+-- Finite 0
+-- >>> o2o = functionOf void void
+-- >>> card o2o
+-- Finite 1
 functionOf :: IEnumeration a -> IEnumeration b -> IEnumeration (a -> b)
-functionOf as bs = case card as of
-  Infinite -> error "functionOf with infinite domain"
-  Finite n -> mapE toFunc fromFunc (finiteEnumerationOf (fromIntegral n) bs)
+functionOf as bs = case card bs of
+  Finite 1 -> singleton (\_ -> select bs 0)   -- 1^x = 1
+  Finite 0 -> case card as of                 -- 0^0 = 1, 0^x = 0
+    Finite 0 -> singleton (\_ -> error "called function with empty domain")
+    _        -> void
+  _        -> case card as of
+    Infinite -> error "functionOf with infinite domain"
+    Finite n -> mapE toFunc fromFunc (finiteEnumerationOf (fromIntegral n) bs)
 
   where
     toFunc bTuple a = E.select bTuple (locate as a)
