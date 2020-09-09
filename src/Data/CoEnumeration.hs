@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 
@@ -13,7 +12,7 @@
 -- Copyright   :  Brent Yorgey, Koji Miyazato
 -- Maintainer  :  byorgey@gmail.com
 -- 
--- A /coenumeration/ is a function from values onto finite or countably infinite
+-- A /coenumeration/ is a function from values to finite or countably infinite
 -- sets, canonically represented by non-negative integers less than its cardinality.
 -- 
 -- Alternatively, a coenumeration can be thought of as a classification of values
@@ -33,7 +32,7 @@ module Data.CoEnumeration
   , Index, Cardinality(..), isFinite
 
     -- * Primitive coenumerations
-  , unit, void
+  , unit, lost
   , boundedEnum
   , nat
   , int
@@ -41,6 +40,7 @@ module Data.CoEnumeration
   , rat
 
     -- * Coenumeration combinators
+  , takeC, dropC, modulo, postcompose, overlayC
   , infinite
   , (><), (<+>)
   , maybeOf, eitherOf, listOf, finiteSubsetOf
@@ -56,7 +56,7 @@ import Data.List (foldl')
 import Data.Ratio
 
 import Data.Functor.Contravariant
-import Data.Functor.Contravariant.Divisible(Divisible(..), Decidable(..))
+import Data.Functor.Contravariant.Divisible(lost, Divisible(..), Decidable(..))
 
 import Data.Enumeration (Index, Cardinality(..), isFinite)
 import qualified Data.Enumeration as E
@@ -138,7 +138,7 @@ int = CoEnumeration{ card = Infinite, locate = integerToNat }
       | n <= 0    = 2 * negate n
       | otherwise = 2 * n - 1
 
--- | 'cw' is the inverse of forward enumeration 'E.cw'.
+-- | 'cw' is an inverse of forward enumeration 'E.cw'.
 --
 -- Because 'E.cw' only enumerates positive 'Rational' values,
 -- @locate cw x@ for zero or less rational number @x@ could be arbitrary.
@@ -181,24 +181,55 @@ rat = contramap caseBySign $ maybeOf (cw <+> cw)
       EQ -> Nothing
       GT -> Just (Left x)
 
--- TODO: clip and modulo
---   clip n   = 0, 1, 2, ..., n-1, n, n, n, ...
---   modulo n = 0, 1, 2, ..., n-1, 0, 1, 2, ...
-
--- TODO: composition
---   CoEnumeration a -> CoEnumeration Index -> CoEnumeration a
---    (a -> Index)   ->  (Index -> Index)   ->   (a -> Index)
---
--- (Should its dual exist in Enumeration too?)
-
 infinite :: CoEnumeration a -> CoEnumeration a
 infinite e = e{ card = Infinite }
 
--- TODO: takeE/dropE analog
+dropC :: Integer -> CoEnumeration a -> CoEnumeration a
+dropC k e
+  | k == 0      = e
+  | card e == 0 = e
+  | card e <= Finite k = error "Impossible empty coenumeration"
+  | otherwise = CoEnumeration{ card = size, locate = loc }
+  where
+    size = card e - Finite k
+    loc = max 0 . subtract k . locate e
 
--- TODO: dual of zipE,
---   ??? :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (Either a b)
--- doing parallel sum rather than disjoint sum of <+>
+takeC :: Integer -> CoEnumeration a -> CoEnumeration a
+takeC k
+  | k <= 0 = checkEmpty
+  | otherwise = aux
+  where
+    aux e =
+      let size = min (Finite k) (card e)
+          loc = min (k-1) . locate e
+      in CoEnumeration{ card = size, locate = loc }
+
+checkEmpty :: CoEnumeration a -> CoEnumeration a
+checkEmpty e
+  | card e == 0 = e
+  | otherwise   = error "Impossible empty coenumeration"
+
+modulo :: Integer -> CoEnumeration Integer
+modulo n
+  | n <= 0    = error $ "modulo: invalid argument " ++ show n
+  | otherwise = CoEnumeration{ card = Finite n, locate = (`mod` n) }
+
+postcompose :: CoEnumeration a -> CoEnumeration Integer -> CoEnumeration a
+postcompose e f = CoEnumeration{
+    card = card f
+  , locate = locate f . locate e
+  }
+
+-- | @overlayC a b@ combines two coenumerations in parallel, sharing
+--   indices of two coenumerations.
+--
+--   The resulting coenumeration has cardinality of the larger of the
+--   two arguments.
+overlayC :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (Either a b)
+overlayC e1 e2 = CoEnumeration{
+    card = max (card e1) (card e2)
+  , locate = either (locate e1) (locate e2)
+  }
 
 maybeOf :: CoEnumeration a -> CoEnumeration (Maybe a)
 maybeOf e = contramap (maybe (Left ()) Right) $ unit <+> e
@@ -209,7 +240,7 @@ eitherOf = (<+>)
 -- | Coenumerate all possible finite lists using given coenumeration.
 --
 --   If a coenumeration @a@ is the inverse of enumeration @b@,
---   'listOf' @a@ is the inverse of forward enumeration 'E.listOf b'.
+--   'listOf' @a@ is the inverse of forward enumeration 'E.listOf' @b@.
 -- 
 -- >>> E.enumerate . E.takeE 6 $ E.listOf E.nat
 -- [[],[0],[0,0],[1],[0,0,0],[1,0]]
