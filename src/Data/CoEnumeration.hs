@@ -169,7 +169,7 @@ cw = CoEnumeration{ card = Infinite, locate = locateCW }
 --
 -- >>> let xs = E.enumerate . E.takeE 6 $ E.rat
 -- >>> (xs, locate rat <$> xs)
--- ([0 % 1,1 % 1,(-1) % 1,1 % 2,(-1) % 2,2 % 1,(-2) % 1],[0,1,2,3,4,5,6])
+-- ([0 % 1,1 % 1,(-1) % 1,1 % 2,(-1) % 2,2 % 1],[0,1,2,3,4,5])
 -- >>> locate rat (E.select E.rat 1000)
 -- 1000
 rat :: CoEnumeration Rational
