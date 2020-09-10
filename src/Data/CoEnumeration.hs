@@ -63,6 +63,13 @@ import Data.Enumeration (Enumeration, Index, Cardinality(..))
 import qualified Data.Enumeration as E
 import Data.Enumeration.Invertible (undiagonal)
 
+------------------------------------------------------------
+-- Setup for doctest examples
+------------------------------------------------------------
+
+-- $setup
+-- >>> :set -XTypeApplications
+
 data CoEnumeration a = CoEnumeration
   { -- | Get the cardinality of a coenumeration.
     card :: Cardinality
@@ -277,7 +284,7 @@ checkEmpty e
 
 -- |
 -- >>> locate (modulo 3) <$> [0..7]
--- [2,0,1,2,0,1,2]
+-- [0,1,2,0,1,2,0,1]
 -- >>> locate (modulo 3) (-4)
 -- 2
 modulo :: Integer -> CoEnumeration Integer
@@ -359,7 +366,6 @@ unSet = foldl' (\n i -> n .|. bit (fromInteger i)) 0
 -- >>> let as = E.finiteEnumerationOf 3 (E.takeE 2 E.nat)
 -- >>> map E.enumerate $ E.enumerate as
 -- [[0,0,0],[0,0,1],[0,1,0],[0,1,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1]]
--- 
 -- >>> let inv_as = finiteFunctionOf 3 (takeC 2 nat)
 -- >>> locate inv_as (E.select (E.finiteList [0,1,1]))
 -- 3
