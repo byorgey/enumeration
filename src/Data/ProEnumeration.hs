@@ -33,9 +33,15 @@ module Data.ProEnumeration(
   , modulo
   , clamped
   , boundedEnum
-  , nat
-  , int
-  , 
+  , nat, int, cw, rat
+
+  , (><), (<+>)
+  , maybeOf, eitherOf
+  , listOf, finiteSubsetOf
+
+  , enumerateP, coenumerateP
+  , proenumerationOf
+  , finiteFunctionOf
 ) where
 
 import qualified Control.Applicative as Ap(Alternative(empty))
@@ -166,6 +172,14 @@ p >< q = combine_ (baseCoEnum p C.>< baseCoEnum q) (baseEnum p E.>< baseEnum q)
       -> ProEnumeration (Either a1 a2) (Either b1 b2)
 p <+> q = combine_ (baseCoEnum p C.<+> baseCoEnum q) (E.eitherOf (baseEnum p) (baseEnum q))
 
+maybeOf :: ProEnumeration a b -> ProEnumeration (Maybe a) (Maybe b)
+maybeOf p = dimap (maybe (Left ()) Right) (either (const Nothing) Just) $
+              unit <+> p
+
+eitherOf :: ProEnumeration a1 b1 -> ProEnumeration a2 b2
+         -> ProEnumeration (Either a1 a2) (Either b1 b2)
+eitherOf = (<+>)
+
 listOf :: ProEnumeration a b -> ProEnumeration [a] [b]
 listOf p = combine_ (C.listOf (baseCoEnum p)) (E.listOf (baseEnum p))
 
@@ -190,23 +204,19 @@ coenumerateP a b = case (E.card a, C.card b) of
 {- |
 
 >    l_a      s_a
-> a -----> N -----> a'
+> a -----> N -----> a'  :: ProEnumeration a a'
+>
 >    l_b      s_b
-> b -----> M -----> b'
+> b -----> M -----> b'  :: ProEnumeration b b'
 > 
-> s_a = select a
-> l_a = locate a
->     :
->     etc.
 > 
-> When N is finite:
+> (N -> b) ---> (N -> M) ---> (N -> b')
+>    ^             ||             |
+>    | (∘ s_a)     ||             | (∘ l_a)
+>    |           (M ^ N)          v
+> (a' -> b)                   (a -> b')
 > 
-> (N -> b) -> M^N -> (N -> b')
->    ^                  |
->    | (∘ s_a)          | (∘ l_a)
->    |                  v
-> (a' -> b)          (a -> b')
-
+> When N is finite, (M ^ N) is at most countable.
 -}
 proenumerationOf
   :: ProEnumeration a a'

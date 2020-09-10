@@ -64,7 +64,10 @@ import qualified Data.Enumeration as E
 import Data.Enumeration.Invertible (undiagonal)
 
 data CoEnumeration a = CoEnumeration
-  { card :: Cardinality
+  { -- | Get the cardinality of a coenumeration.
+    card :: Cardinality
+
+    -- | Compute the index of a particular value.
   , locate :: a -> Index
   }
 
@@ -77,40 +80,43 @@ unsafeMkCoEnumeration = CoEnumeration
 instance Contravariant CoEnumeration where
   contramap f e = e{ locate = locate e . f }
 
+-- | Associativity of 'divide' is maintained only when
+--   arguments are finite.
 instance Divisible CoEnumeration where
   divide f a b = contramap f $ a >< b
   conquer = unit
 
+-- | Associativity of 'choose' is maintained only when
+--   arguments are finite.
 instance Decidable CoEnumeration where
   choose f a b = contramap f $ a <+> b
   lose f = contramap f void
 
+-- | Coenumeration to the singleton set.
+--
+-- >>> card unit
+-- Finite 1
+-- >>> locate unit True
+-- 0
+-- >>> locate unit (3 :: Int)
+-- 0
+-- >>> locate unit (cos :: Float -> Float)
+-- 0
 unit :: CoEnumeration a
 unit = CoEnumeration{ card = 1, locate = const 0 }
 
+-- | Coenumeration of an uninhabited type 'Void'.
+--
+-- >>> card void
+-- Finite 0
+-- 
+-- Note that when a coenumeration of a type @t@ has cardinality 0,
+-- it should indicate /No/ value of @t@ can be created without
+-- using bottoms like @undefined@.
 void :: CoEnumeration Void
 void = CoEnumeration{ card = 0, locate = const (error "locate void") }
 
-(><) :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (a,b)
-e1 >< e2 = CoEnumeration{ card = n1 * n2, locate = locatePair }
-  where
-    n1 = card e1
-    n2 = card e2
-    locatePair = case (n1, n2) of
-      (_,          Finite n2') -> \(a,b) -> locate e1 a * n2' + locate e2 b
-      (Finite n1', Infinite)   -> \(a,b) -> locate e1 a + locate e2 b * n1'
-      (Infinite,   Infinite)   -> \(a,b) -> undiagonal (locate e1 a, locate e2 b)
-
-(<+>) :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (Either a b)
-e1 <+> e2 = CoEnumeration{ card = n1 + n2, locate = locateEither }
-  where
-    n1 = card e1
-    n2 = card e2
-    locateEither = case (n1, n2) of
-      (Finite n1', _)          -> either (locate e1) ((n1' +) . locate e2)
-      (Infinite,   Finite n2') -> either ((n2' +) . locate e1) (locate e2)
-      (Infinite,   Infinite)   -> either ((*2) . locate e1) (succ . (*2) . locate e2)
-
+-- | An inverse of forward 'E.boundedEnum'
 boundedEnum :: forall a. (Enum a, Bounded a) => CoEnumeration a
 boundedEnum = CoEnumeration{ card = size, locate = loc }
   where loc = toInteger . subtract lo . fromEnum
@@ -187,9 +193,60 @@ rat = contramap caseBySign $ maybeOf (cw <+> cw)
       EQ -> Nothing
       GT -> Just (Left x)
 
+-- | Sets the cardinality of given coenumeration to 'Infinte'
 infinite :: CoEnumeration a -> CoEnumeration a
 infinite e = e{ card = Infinite }
 
+-- | Cartesian product of coenumeration, made to be an inverse of
+--   cartesian product of enumeration '(E.><)'.
+--   
+-- >>> let a  = E.finite 3 E.>< (E.boundedEnum @Bool)
+-- >>> let a' = modulo 3     >< boundedEnum @Bool
+-- >>> (E.enumerate a, locate a' <$> E.enumerate a)
+-- ([(0,False),(0,True),(1,False),(1,True),(2,False),(2,True)],[0,1,2,3,4,5])
+--
+-- This operation is not associative if and only if one of arguments
+-- is not finite.
+(><) :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (a,b)
+e1 >< e2 = CoEnumeration{ card = n1 * n2, locate = locatePair }
+  where
+    n1 = card e1
+    n2 = card e2
+    locatePair = case (n1, n2) of
+      (_,          Finite n2') -> \(a,b) -> locate e1 a * n2' + locate e2 b
+      (Finite n1', Infinite)   -> \(a,b) -> locate e1 a + locate e2 b * n1'
+      (Infinite,   Infinite)   -> \(a,b) -> undiagonal (locate e1 a, locate e2 b)
+
+-- | Sum, or disjoint union, of two coenumerations.
+--
+--   It corresponds to disjoint union of enumeratinos 'E.eitherOf'.
+--   
+--   Its type can't be
+--   @CoEnumeration a -> CoEnumeration a -> CoEnumeration a@,
+--   like @Enumeration@ which is covariant functor, because @CoEnumeration@ is
+--   'Contravariant' functor.
+--   
+-- >>> let a  = E.finite 3 `E.eitherOf` (E.boundedEnum @Bool)
+-- >>> let a' = modulo 3    <+>          boundedEnum @Bool
+-- >>> (E.enumerate a, locate a' <$> E.enumerate a)
+-- ([Left 0,Left 1,Left 2,Right False,Right True],[0,1,2,3,4])
+--
+-- This operation is not associative if and only if one of arguments
+-- is not finite.
+(<+>) :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (Either a b)
+e1 <+> e2 = CoEnumeration{ card = n1 + n2, locate = locateEither }
+  where
+    n1 = card e1
+    n2 = card e2
+    locateEither = case (n1, n2) of
+      (Finite n1', _)          -> either (locate e1) ((n1' +) . locate e2)
+      (Infinite,   Finite n2') -> either ((n2' +) . locate e1) (locate e2)
+      (Infinite,   Infinite)   -> either ((*2) . locate e1) (succ . (*2) . locate e2)
+
+-- |
+--
+-- >>> locate (dropC 3 nat) <$> [0..5]
+-- [0,0,0,0,1,2]
 dropC :: Integer -> CoEnumeration a -> CoEnumeration a
 dropC k e
   | k == 0      = e
@@ -200,6 +257,9 @@ dropC k e
     size = card e - Finite k
     loc = max 0 . subtract k . locate e
 
+-- |
+-- >>> locate (takeC 3 nat) <$> [0..5]
+-- [0,1,2,2,2,2]
 takeC :: Integer -> CoEnumeration a -> CoEnumeration a
 takeC k
   | k <= 0 = checkEmpty
@@ -215,6 +275,11 @@ checkEmpty e
   | card e == 0 = e
   | otherwise   = error "Impossible empty coenumeration"
 
+-- |
+-- >>> locate (modulo 3) <$> [0..7]
+-- [2,0,1,2,0,1,2]
+-- >>> locate (modulo 3) (-4)
+-- 2
 modulo :: Integer -> CoEnumeration Integer
 modulo n
   | n <= 0    = error $ "modulo: invalid argument " ++ show n
@@ -237,9 +302,11 @@ overlayC e1 e2 = CoEnumeration{
   , locate = either (locate e1) (locate e2)
   }
 
+-- | The inverse of forward 'E.maybeOf'
 maybeOf :: CoEnumeration a -> CoEnumeration (Maybe a)
 maybeOf e = contramap (maybe (Left ()) Right) $ unit <+> e
 
+-- | Synonym of '(<+>)'
 eitherOf :: CoEnumeration a -> CoEnumeration b -> CoEnumeration (Either a b)
 eitherOf = (<+>)
 
@@ -256,7 +323,6 @@ eitherOf = (<+>)
 -- [1008,26,0]
 -- >>> locate (listOf nat) [1008,26,0]
 -- 1000000
-
 listOf :: CoEnumeration a -> CoEnumeration [a]
 listOf e = CoEnumeration{ card = size, locate = locateList }
   where
@@ -273,6 +339,10 @@ unList Infinite   = foldl' (\n a -> 1 + undiagonal (a, n)) 0 . reverse
 --
 --   Given a coenumeration of @a@, make a coenumeration of finite sets of
 --   @a@, by ignoring order and repetition from @[a]@.
+-- 
+-- >>> as = take 11 . E.enumerate $ E.finiteSubsetOf E.nat
+-- >>> (as, locate (finiteSubsetOf nat) <$> as)
+-- ([[],[0],[1],[0,1],[2],[0,2],[1,2],[0,1,2],[3],[0,3],[1,3]],[0,1,2,3,4,5,6,7,8,9,10])
 finiteSubsetOf :: CoEnumeration a -> CoEnumeration [a]
 finiteSubsetOf e = CoEnumeration{ card = size, locate = unSet . fmap (locate e) }
   where
@@ -291,6 +361,14 @@ unSet = foldl' (\n i -> n .|. bit (fromInteger i)) 0
 --   Ideally, its type should be the following dependent type
 --   
 --   > {n :: Integer} -> CoEnumeration a -> CoEnumeration ({k :: Integer | k < n} -> a)
+--
+-- >>> let as = E.finiteEnumerationOf 3 (E.takeE 2 E.nat)
+-- >>> map E.enumerate $ E.enumerate as
+-- [[0,0,0],[0,0,1],[0,1,0],[0,1,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1]]
+-- 
+-- >>> let inv_as = finiteFunctionOf 3 (takeC 2 nat)
+-- >>> locate inv_as (E.select (E.finiteList [0,1,1]))
+-- 3
 finiteFunctionOf :: Integer -> CoEnumeration a -> CoEnumeration (Integer -> a)
 finiteFunctionOf 0 _ = unit
 finiteFunctionOf n a = CoEnumeration{ card = size, locate = locateEnum }
