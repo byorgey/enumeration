@@ -25,11 +25,11 @@
 
 module Data.CoEnumeration
   ( -- * Coenumerations
-    CoEnumeration(), card, locate
+    CoEnumeration(), card, locate, isFinite
   , unsafeMkCoEnumeration
 
     -- * Cardinality and Index
-  , Index, Cardinality(..), isFinite
+  , Index, Cardinality(..)
 
     -- * Primitive coenumerations
   , unit, lost
@@ -44,6 +44,7 @@ module Data.CoEnumeration
   , infinite
   , (><), (<+>)
   , maybeOf, eitherOf, listOf, finiteSubsetOf
+  , finiteFunctionOf
 
     -- * Utilities
   , unList, unSet
@@ -58,7 +59,7 @@ import Data.Ratio
 import Data.Functor.Contravariant
 import Data.Functor.Contravariant.Divisible(lost, Divisible(..), Decidable(..))
 
-import Data.Enumeration (Index, Cardinality(..), isFinite)
+import Data.Enumeration (Enumeration, Index, Cardinality(..))
 import qualified Data.Enumeration as E
 import Data.Enumeration.Invertible (undiagonal)
 
@@ -66,6 +67,9 @@ data CoEnumeration a = CoEnumeration
   { card :: Cardinality
   , locate :: a -> Index
   }
+
+isFinite :: CoEnumeration a -> Bool
+isFinite = (Infinite /=) . card
 
 unsafeMkCoEnumeration :: Cardinality -> (a -> Index) -> CoEnumeration a
 unsafeMkCoEnumeration = CoEnumeration
@@ -109,8 +113,10 @@ e1 <+> e2 = CoEnumeration{ card = n1 + n2, locate = locateEither }
 
 boundedEnum :: forall a. (Enum a, Bounded a) => CoEnumeration a
 boundedEnum = CoEnumeration{ card = size, locate = loc }
-  where loc = toInteger . fromEnum
-        size = Finite $ 1 + loc (maxBound @a) - loc (minBound @a)
+  where loc = toInteger . subtract lo . fromEnum
+        lo = fromEnum (minBound @a)
+        hi = fromEnum (maxBound @a)
+        size = Finite $ 1 + toInteger hi - toInteger lo
 
 -- | 'nat' is an inverse of forward enumeration 'E.nat'.
 --  
@@ -263,7 +269,9 @@ unList :: Cardinality -> [Index] -> Index
 unList (Finite k) = foldl' (\n a -> 1 + (a + n * k)) 0 . reverse
 unList Infinite   = foldl' (\n a -> 1 + undiagonal (a, n)) 0 . reverse
 
--- | Given a coenumeration of @a@, make a coenumeration of finite sets of
+-- | An inverse of 'E.finiteSubsetOf'.
+--
+--   Given a coenumeration of @a@, make a coenumeration of finite sets of
 --   @a@, by ignoring order and repetition from @[a]@.
 finiteSubsetOf :: CoEnumeration a -> CoEnumeration [a]
 finiteSubsetOf e = CoEnumeration{ card = size, locate = unSet . fmap (locate e) }
@@ -275,5 +283,28 @@ finiteSubsetOf e = CoEnumeration{ card = size, locate = unSet . fmap (locate e) 
 unSet :: [Index] -> Index
 unSet = foldl' (\n i -> n .|. bit (fromInteger i)) 0
 
--- TODO: finiteEnumerationOf
+-- | An inverse of 'E.finiteEnumerationOf'.
+--   
+--   Given a coenumeration of @a@, make a coenumeration of function from
+--   finite sets to @a@.
+--   
+--   Ideally, its type should be the following dependent type
+--   
+--   > {n :: Integer} -> CoEnumeration a -> CoEnumeration ({k :: Integer | k < n} -> a)
+finiteFunctionOf :: Integer -> CoEnumeration a -> CoEnumeration (Integer -> a)
+finiteFunctionOf 0 _ = unit
+finiteFunctionOf n a = CoEnumeration{ card = size, locate = locateEnum }
+  where
+    size = case card a of
+      Finite k -> Finite (k^n)
+      Infinite -> Infinite
+    
+    step = case card a of
+      Finite k -> \r d -> k * r + d
+      Infinite -> curry undiagonal
 
+    locateEnum f =
+      let go i !acc
+            | i == n    = acc
+            | otherwise = go (i+1) (step acc (locate a (f i)))
+      in go 0 0
