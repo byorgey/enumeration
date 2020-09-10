@@ -40,7 +40,7 @@ module Data.CoEnumeration
   , rat
 
     -- * Coenumeration combinators
-  , takeC, dropC, modulo, postcompose, overlayC
+  , takeC, dropC, modulo, overlayC
   , infinite
   , (><), (<+>)
   , maybeOf, eitherOf, listOf, finiteSubsetOf
@@ -284,12 +284,6 @@ modulo :: Integer -> CoEnumeration Integer
 modulo n
   | n <= 0    = error $ "modulo: invalid argument " ++ show n
   | otherwise = CoEnumeration{ card = Finite n, locate = (`mod` n) }
-
-postcompose :: CoEnumeration a -> CoEnumeration Integer -> CoEnumeration a
-postcompose e f = CoEnumeration{
-    card = card f
-  , locate = locate f . locate e
-  }
 
 -- | @overlayC a b@ combines two coenumerations in parallel, sharing
 --   indices of two coenumerations.
