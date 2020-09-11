@@ -23,8 +23,7 @@
 -- and most of them are implemented as inverses of enumerations made with
 -- functions in "Data.Enumeration".
 -- 
--- Example
--- =======
+-- == Example
 -- 
 -- Through examples of this module, "Data.Enumeration" module is
 -- referred by alias @E@.
