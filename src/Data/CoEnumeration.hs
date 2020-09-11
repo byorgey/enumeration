@@ -19,10 +19,27 @@
 -- into finite or countably infinite classes, with each class labelled with
 -- integers.
 -- 
--- TODO examples
-
------------------------------------------------------------------------------
-
+-- This module provides many ways to construct @CoEnumeration@ values,
+-- and most of them are implemented as inverses of enumerations made with
+-- functions in "Data.Enumeration".
+-- 
+-- Example
+-- =======
+-- 
+-- Through examples of this module, "Data.Enumeration" module is
+-- referred by alias @E@.
+-- 
+-- > import qualified Data.Enumeration as E
+-- 
+-- >>> take 5 . drop 5 $ E.enumerate (E.listOf E.nat)
+-- [[1,0],[2],[0,1],[1,0,0],[2,0]]
+-- >>> locate (listOf nat) <$> [[1,0],[2],[0,1],[1,0,0],[2,0]]
+-- [5,6,7,8,9]
+--
+-- >>> locate (listOf nat) [3,1,4,1,5,9,2]
+-- 78651719792187121765701606023038613403478037124236785850350
+-- >>> E.select (E.listOf E.nat) 78651719792187121765701606023038613403478037124236785850350
+-- [3,1,4,1,5,9,2]
 module Data.CoEnumeration
   ( -- * Coenumerations
     CoEnumeration(), card, locate, isFinite
@@ -50,7 +67,6 @@ module Data.CoEnumeration
   , unList, unSet
   ) where
 
-import Control.Applicative(Alternative(empty))
 import Data.Void
 import Data.Bits
 import Data.List (foldl')
@@ -59,9 +75,9 @@ import Data.Ratio
 import Data.Functor.Contravariant
 import Data.Functor.Contravariant.Divisible(lost, Divisible(..), Decidable(..))
 
-import Data.Enumeration (Enumeration, Index, Cardinality(..))
-import qualified Data.Enumeration as E
+import Data.Enumeration (Index, Cardinality(..))
 import Data.Enumeration.Invertible (undiagonal)
+
 
 ------------------------------------------------------------
 -- Setup for doctest examples
@@ -69,18 +85,55 @@ import Data.Enumeration.Invertible (undiagonal)
 
 -- $setup
 -- >>> :set -XTypeApplications
+-- >>> import qualified Data.Enumeration as E
 
+-- | A /coenumeration/ is a function from values to finite or countably infinite
+-- sets, canonically represented by non-negative integers less than its cardinality.
+-- 
+-- Alternatively, a coenumeration can be thought of as a classification of values
+-- into finite or countably infinite classes, with each class labelled with
+-- integers.
+-- 
+-- 'CoEnumeration' is an instance of the following type classes:
+--
+-- * 'Contravariant' (you can change the type of base values contravariantly)
+-- * 'Divisible' (representing Cartesian product of finite number of coenumerations)
+--
+--     * Binary cartesian product ('><')
+--     * Coenumeration onto singleton set as an unit ('unit')
+--
+-- * 'Decidable' (representing disjoint union of finite number of coenumerations)
+--
+--     * Binary disjoint union ('<+>')
+--     * Coenumeration of uninhabited type 'Void'. It's not exported directly,
+--       but only through a method of the class
+--       
+--         'lose' @:: Decidable f => (a -> Void) -> f Void@
+--       
+--         or
+--       
+--         'lost' @:: Decidable f => f Void@.
 data CoEnumeration a = CoEnumeration
   { -- | Get the cardinality of a coenumeration.
+    --   Under \"classification\" interpretation,
+    --   it is the cardinality of the set of classes.
     card :: Cardinality
 
     -- | Compute the index of a particular value.
   , locate :: a -> Index
   }
 
+-- | Returns if the the cardinality of coenumeration is finite.
 isFinite :: CoEnumeration a -> Bool
 isFinite = (Infinite /=) . card
 
+-- | Constructs a coenumeration.
+--
+--   To construct valid coenumeration by @unsafeMkCoEnumeration n f@,
+--   for all @x :: a@, it must satisfy @(Finite (f x) < n)@.
+--   
+--   This functions does not (and never could) check the validity
+--   of its arguments.
 unsafeMkCoEnumeration :: Cardinality -> (a -> Index) -> CoEnumeration a
 unsafeMkCoEnumeration = CoEnumeration
 
@@ -200,7 +253,7 @@ rat = contramap caseBySign $ maybeOf (cw <+> cw)
       EQ -> Nothing
       GT -> Just (Left x)
 
--- | Sets the cardinality of given coenumeration to 'Infinte'
+-- | Sets the cardinality of given coenumeration to 'Infinite'
 infinite :: CoEnumeration a -> CoEnumeration a
 infinite e = e{ card = Infinite }
 
@@ -226,12 +279,11 @@ e1 >< e2 = CoEnumeration{ card = n1 * n2, locate = locatePair }
 
 -- | Sum, or disjoint union, of two coenumerations.
 --
---   It corresponds to disjoint union of enumeratinos 'E.eitherOf'.
+--   It corresponds to disjoint union of enumerations 'E.eitherOf'.
 --   
---   Its type can't be
---   @CoEnumeration a -> CoEnumeration a -> CoEnumeration a@,
---   like @Enumeration@ which is covariant functor, because @CoEnumeration@ is
---   'Contravariant' functor.
+--   Its type can't be @CoEnumeration a -> CoEnumeration a -> CoEnumeration a@,
+--   like 'Data.Enumeration.Enumeration' which is covariant functor,
+--   because @CoEnumeration@ is 'Contravariant' functor.
 --   
 -- >>> let a  = E.finite 3 `E.eitherOf` (E.boundedEnum @Bool)
 -- >>> let a' = modulo 3    <+>          boundedEnum @Bool
