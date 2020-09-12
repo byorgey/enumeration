@@ -27,16 +27,24 @@
 -----------------------------------------------------------------------------
 
 module Data.ProEnumeration(
+  -- * Proenumeration type
     ProEnumeration()
-  , card, select, locate, isFinite
+  , card, select, locate
+  
+  , isFinite
   , baseEnum, baseCoEnum, run
   , enumerateRange
 
   , unsafeMkProEnumeration
   , mkProEnumeration
-  
+
+  -- * ProEnumeration is Profunctor
+  , dimap, (.@), (@.)
+
+  -- * Using Cardinality
   , Cardinality(..), Index
 
+  -- * Primitive proenumerations
   , unit, empty
   , singleton
   , modulo, clamped, boundsChecked
@@ -44,6 +52,7 @@ module Data.ProEnumeration(
   , boundedEnum
   , nat, int, cw, rat
 
+  -- * Combinators
   , infinite
   , compose
   , (><), (<+>)
