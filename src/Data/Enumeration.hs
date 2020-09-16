@@ -667,9 +667,11 @@ eitherOf a b = Left <$> a <|> Right <$> b
 --
 -- >>> enumerate . takeE 15 $ listOf nat
 -- [[],[0],[0,0],[1],[0,0,0],[1,0],[2],[0,1],[1,0,0],[2,0],[3],[0,0,0,0],[1,1],[2,0,0],[3,0]]
+-- >>> enumerate $ listOf empty :: [[Data.Void.Void]]
+-- [[]]
 listOf :: Enumeration a -> Enumeration [a]
 listOf a = case card a of
-  Finite 0 -> empty
+  Finite 0 -> singleton []
   _        -> listOfA
     where
       listOfA = infinite $ singleton [] <|> (:) <$> a <*> listOfA
