@@ -1,5 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,14 +10,14 @@
 -- Module      :  Data.ProEnumeration
 -- Copyright   :  Brent Yorgey, Koji Miyazato
 -- Maintainer  :  byorgey@gmail.com
--- 
--- A /proenumeration/ is a pair of 'CoEnumeration' and 'Enumeration' 
+--
+-- A /proenumeration/ is a pair of a 'CoEnumeration' and an 'Enumeration'
 -- sharing the same cardinality.
--- 
--- A /proenumeration/ can be seen as a function with explicitly enumerated
+--
+-- A /proenumeration/ can be seen as a function with an explicitly enumerated
 -- range.
--- 
--- Through documentations of this module, these alias of imports are used:
+--
+-- Through documentations of this module, these import aliases are used:
 --
 -- > import qualified Data.Enumeration as E
 -- > import qualified Data.CoEnumeration as C
@@ -30,7 +28,7 @@ module Data.ProEnumeration(
   -- * Proenumeration type
     ProEnumeration()
   , card, select, locate
-  
+
   , isFinite
   , baseEnum, baseCoEnum, run
   , enumerateRange
@@ -38,7 +36,7 @@ module Data.ProEnumeration(
   , unsafeMkProEnumeration
   , mkProEnumeration
 
-  -- * ProEnumeration is Profunctor
+  -- * ProEnumeration is a Profunctor
   , dimap, (.@), (@.)
 
   -- * Using Cardinality
@@ -64,19 +62,20 @@ module Data.ProEnumeration(
   , finiteFunctionOf
 ) where
 
-import qualified Control.Applicative as Ap(Alternative(empty))
-import Data.Void
+import qualified Control.Applicative        as Ap (Alternative (empty))
+import           Data.Void
 
-import Data.Functor.Contravariant
+import           Data.Functor.Contravariant
 
-import Data.Enumeration (Index, Cardinality(..), Enumeration)
-import qualified Data.Enumeration as E
-import Data.CoEnumeration (CoEnumeration)
-import qualified Data.CoEnumeration as C
+import           Data.CoEnumeration         (CoEnumeration)
+import qualified Data.CoEnumeration         as C
+import           Data.Enumeration           (Cardinality (..), Enumeration,
+                                             Index)
+import qualified Data.Enumeration           as E
 
--- | A /proenumeration/ is a pair of 'CoEnumeration' and 'Enumeration' 
--- sharing the same cardinality. 
--- Alternatively, a /proenumeration/ can be seen as a function with
+-- | A /proenumeration/ is a pair of a 'CoEnumeration' and an 'Enumeration'
+-- sharing the same cardinality.
+-- Alternatively, a /proenumeration/ can be seen as a function with an
 -- explicitly enumerated range.
 --
 -- Through this documentation,
@@ -84,20 +83,20 @@ import qualified Data.CoEnumeration as C
 --
 -- >    f      g
 -- > a ---> N ---> b  :: ProEnumeration a b
--- 
--- Which means it is a value of @p :: ProEnumeration a b@, with
+--
+-- Which means it is a value @p :: ProEnumeration a b@ with
 -- cardinality @N@, @locate p = f@, and @select p = g@.
--- 
--- Seeing @N@ in the diagram as a subset of integers:
--- 
+--
+-- We can see @N@ in the diagram as a subset of integers:
+--
 -- > N = {i :: Integer | i < N}
--- 
+--
 -- Then it is actually a (category-theoretic)
 -- diagram showing values of @ProEnumeration a b@.
 data ProEnumeration a b =
   ProEnumeration {
     -- | Get the cardinality of a proenumeration
-    card :: Cardinality
+    card   :: Cardinality
 
     -- | See @E.'E.select'@
   , select :: Index -> b
@@ -111,7 +110,7 @@ data ProEnumeration a b =
 isFinite :: ProEnumeration a b -> Bool
 isFinite = (/= Infinite) . card
 
--- | ProEnumeration is Profunctor
+-- | ProEnumeration is a Profunctor
 --
 -- > dimap l r p = l .@ p @. r
 dimap :: (a' -> a) -> (b -> b') -> ProEnumeration a b -> ProEnumeration a' b'
@@ -130,7 +129,7 @@ l .@ p = p{ locate = locate p . l }
 infixr 8 .@
 
 -- | Take an 'Enumeration' from a proenumeration,
---   discarding @CoEnumeration@ part
+--   discarding the @CoEnumeration@ part
 baseEnum :: ProEnumeration a b -> Enumeration b
 baseEnum p = E.mkEnumeration (card p) (select p)
 
@@ -139,7 +138,7 @@ baseEnum p = E.mkEnumeration (card p) (select p)
 baseCoEnum :: ProEnumeration a b -> CoEnumeration a
 baseCoEnum p = C.unsafeMkCoEnumeration (card p) (locate p)
 
--- | Turn a proenumeration into normal function.
+-- | Turn a proenumeration into a normal function.
 --
 -- > run p = (select p :: Index -> b) . (locate p :: a -> Index)
 run :: ProEnumeration a b -> a -> b
@@ -153,7 +152,7 @@ enumerateRange = E.enumerate . baseEnum
 
 -- | Constructs a proenumeration from a 'CoEnumeration' and an 'Enumeration'.
 --
---   Cardinalities of two arguments must be equal to another.
+--   The cardinalities of the two arguments must be equal.
 --   Otherwise, 'mkProEnumeration' returns an error.
 --
 --   > baseEnum (mkProEnumeration a b) = b
@@ -173,13 +172,13 @@ mkProEnumeration a b
 
 -- | Constructs a proenumeration.
 --
---   To construct valid proenumeration by @unsafeMkProEnumeration n f g@,
+--   To construct a valid proenumeration by @unsafeMkProEnumeration n f g@,
 --   it must satisfy the following conditions:
 --
 --   * For all @i :: Integer@, if @0 <= i && i < n@, then @f i@ should be
 --     \"valid\" (usually, it means @f i@ should evaluate without exception).
 --   * For all @x :: a@, @(Finite (g x) < n)@.
---   
+--
 --   This functions does not (and never could) check the validity
 --   of its arguments.
 unsafeMkProEnumeration
@@ -215,7 +214,7 @@ modulo k = mkProEnumeration (C.modulo k) (E.finite k)
 --   which does not modify integers between @lo@ and @hi@, inclusive,
 --   and limits smaller (larger) integer to @lo@ (@hi@).
 --
---   It is error to call this function if @lo > hi@.
+--   It is an error to call this function if @lo > hi@.
 --
 --   > run (clamped lo hi) = min hi . max lo
 --
@@ -234,9 +233,9 @@ clamped lo hi
       }
   | otherwise = error "Empty range"
 
--- | @boundsChecked lo hi@ is a proenumeration of \"bounds check\" function,
---   which validates an input is between @lo@ and @hi@, inclusive,
---   and returns @Nothing@ if it is outside that bounds.
+-- | @boundsChecked lo hi@ is a proenumeration of a \"bounds check\" function,
+--   which validates that an input is between @lo@ and @hi@, inclusive,
+--   and returns @Nothing@ if it is outside those bounds.
 --
 --   > run (boundsChecked lo hi) i
 --       | lo <= i && i <= hi = Just i
@@ -266,16 +265,16 @@ boundsChecked lo hi = ProEnumeration
           | otherwise          = n
 
 
--- | @finiteList as@ is a proenumeration of \"bounds checked\"
+-- | @finiteList as@ is a proenumeration of a \"bounds checked\"
 --   indexing of @as@.
---   
+--
 --   > run (finiteList as) i
 --       | 0 <= i && i < length as = Just (as !! i)
 --       | otherwise               = Nothing
 --
 --   Note that 'finiteList' uses '!!' on the input list
---   under the hood, which have bad performance for longer list.
---   See the documentation of Data.Enumeration.'E.finiteList' too.
+--   under the hood, which has bad performance for long lists.
+--   See also the documentation of Data.Enumeration.'E.finiteList'.
 -- >>> card (finiteList "HELLO")
 -- Finite 6
 -- >>> -- Justs and Nothing
@@ -290,9 +289,9 @@ finiteList as = boundsChecked 0 (n-1) @. (fmap sel)
     Finite n = E.card as'
     sel = E.select as'
 
--- | @finiteCycle as@ is a proenumeration of indexing of @as@,
---   where every integer is valid index by taking modulo @length as@.
---   
+-- | @finiteCycle as@ is a proenumeration of an indexing of @as@,
+--   where every integer is a valid index by taking it modulo @length as@.
+--
 --   > run (finiteCycle as) i = as !! (i `mod` length as)
 --
 --   If @as@ is an empty list, it is an error.
@@ -332,52 +331,52 @@ infinite p = p{ card = Infinite }
 
 -- * Proenumeration combinators
 
--- | From two proenumerations @p, q@, makes a proenumeration
+-- | From two proenumerations @p, q@, we can make a proenumeration
 --   @compose p q@ which behaves as a composed function
 --   (in diagrammatic order like 'Control.Category.>>>'.)
 --
 --   > run (compose p q) = run q . run p
---   
---   @p@ and @q@ can be drawn in a diagram, like the following:
---   
+--
+--   @p@ and @q@ can be drawn in a diagram as follows:
+--
 --   > [_______p______] [______q______]
---   > 
+--   >
 --   >    lp      sp      lq      sq
 --   > a ----> N ----> b ----> M ----> c
---   
+--
 --   To get a proenumeration @a -> ?? -> c@, there are two obvious choices:
 --
 --   >       run p >>> lq         sq
 --   > a --------------------> M ----> c
 --   >    lp         sp >>> run q
 --   > a ----> N --------------------> c
---   
---   This function choose one with smaller cardinality between above two.
+--
+--   This function chooses the option with the smaller cardinality.
 compose :: ProEnumeration a b -> ProEnumeration b c -> ProEnumeration a c
 compose p q
   | card p <= card q = p @. run q
   | otherwise        = run p .@ q
 
 -- | Cartesian product of proenumerations.
--- 
+--
 -- @
 -- p >< q = 'mkProEnumeration' (baseCoEnum p C.'C.><' baseCoEnum q)
 --                             (baseEnum p   E.'E.><' baseEnum q)
 -- @
--- 
--- This operation is not associative if and only if one of arguments
+--
+-- This operation is not associative if and only if one of the arguments
 -- is not finite.
 (><) :: ProEnumeration a1 b1 -> ProEnumeration a2 b2 -> ProEnumeration (a1,a2) (b1,b2)
 p >< q = mkProEnumeration (baseCoEnum p C.>< baseCoEnum q) (baseEnum p E.>< baseEnum q)
 
--- | Direct product of proenumerations.
--- 
+-- | Disjoint sum of proenumerations.
+--
 -- @
 -- p <+> q = 'mkProEnumeration'
 --    (baseCoEnum p C.'C.<+>'        baseCoEnum q)
 --    (baseEnum p   `E.'E.eitherOf'` baseEnum q)
 -- @
--- This operation is not associative if and only if one of arguments
+-- This operation is not associative if and only if one of the arguments
 -- is not finite.
 (<+>) :: ProEnumeration a1 b1 -> ProEnumeration a2 b2
       -> ProEnumeration (Either a1 a2) (Either b1 b2)
@@ -407,17 +406,18 @@ finiteSubsetOf :: ProEnumeration a b -> ProEnumeration [a] [b]
 finiteSubsetOf p =
   mkProEnumeration (C.finiteSubsetOf (baseCoEnum p)) (E.finiteSubsetOf (baseEnum p))
 
--- | Enumerate every possible proenumerations.
+-- | Enumerate every possible proenumeration.
 --
--- For @enumerateP a b@, it generates proenumerations @p@
--- such that the function @run p@ have the following properties:
--- 
--- * Range of @run p@ is a subset of @b :: Enumeration b@.
+-- @enumerateP a b@ generates proenumerations @p@
+-- such that the function @run p@ has the following properties:
+--
+-- * The range of @run p@ is a subset of @b :: Enumeration b@.
 -- * If @locate a x = locate a y@, then @run p x = run p y@.
---   In other words, @run p@ factor through @locate a@.
--- 
--- This function generates @p@ so every function of type @a -> b@ with above
--- properties uniquely appears as @run p@.
+--   In other words, @run p@ factors through @locate a@.
+--
+-- This function generates proenumerations @p@ in such a way that
+-- every function of type @a -> b@ with the above properties uniquely
+-- appears as @run p@ for some enumerated @p@.
 enumerateP :: CoEnumeration a -> Enumeration b -> Enumeration (ProEnumeration a b)
 enumerateP a b = case (C.card a, E.card b) of
   (0, _) -> E.singleton (mkProEnumeration a Ap.empty)
@@ -425,28 +425,30 @@ enumerateP a b = case (C.card a, E.card b) of
   (Finite k,_) -> mkProEnumeration a <$> E.finiteEnumerationOf (fromInteger k) b
   (Infinite,_) -> error "infinite domain"
 
--- | Coenumerate every possible functions.
+-- | Coenumerate every possible function.
 --
--- For @coenumerateP as bs@, it classifies functions of type @a -> b@
--- by the following criteria:
--- 
---     @f@ and @g@ have the same index ⇔  
---     For all elements @a@ of @as :: Enumeration a@,
---     @locate bs (f a) = locate bs (g a)@.
--- 
+-- @coenumerateP as bs@ classifies functions of type @a -> b@
+-- by the following criterion:
+--
+-- @f@ and @g@ have the same index
+--
+-- /if and only if/
+--
+-- For all elements @a@ of @as :: Enumeration a@,
+--   @locate bs (f a) = locate bs (g a)@.
+--
 -- /Note/: The suffix @P@ suggests it coenumerates @ProEnumeration a b@,
--- but it actually coenumerates @a -> b@. It has a reason.
--- 
+-- but it actually coenumerates @a -> b@.  The reason is that
 -- @ProEnumeration a b@ carries extra data and constraints like its cardinality,
--- but classification does not care those. Thus, it is more allowing to
+-- but the classification does not care about those. Thus, it is more permissive to
 -- accept any function of type @a -> b@.
--- 
--- To force it coenumerate proenumerations,
+--
+-- To force it to coenumerate proenumerations,
 -- @'contramap' 'run'@ can be applied.
 coenumerateP :: Enumeration a -> CoEnumeration b -> CoEnumeration (a -> b)
 coenumerateP a b = case (E.card a, C.card b) of
-  (0, _) -> C.unit
-  (_, 1) -> C.unit
+  (0, _)       -> C.unit
+  (_, 1)       -> C.unit
   (Finite k,_) -> contramap (\f -> f . E.select a) $ C.finiteFunctionOf k b
   (Infinite,_) -> error "infinite domain"
 
@@ -457,8 +459,8 @@ coenumerateP a b = case (E.card a, C.card b) of
 >
 >    l_b      s_b
 > b -----> M -----> b'  :: ProEnumeration b b'
-> 
-> 
+>
+>
 > (N -> b) ---> (N -> M) ---> (N -> b')
 >    ^             ||             |
 >    | (. s_a)     ||             | (. l_a)
@@ -484,7 +486,7 @@ proenumerationOf a b
       (enumerateP (baseCoEnum a) (baseEnum b))
 
 -- | @finiteFunctionOf k p@ is a proenumeration of products of @k@ copies of
---   @a@, @b@ respectively.
+--   @a@ and @b@ respectively.
 --
 --   If @p@ is a invertible enumeration, @finiteFunctionOf k p@ is too.
 --
