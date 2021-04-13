@@ -457,6 +457,19 @@ interleave e = IEnumeration
             Infinite -> undiagonal (i,j)
   }
 
+-- | XXX comment me
+concat :: (a -> Index) -> [IEnumeration a] -> IEnumeration a
+concat outer es
+  | not (all isFinite es) = error "infinite!"
+concat outer es = IEnumeration
+  { baseEnum = foldr ((E.<+>) . baseEnum) empty es
+  , locate   = \a -> let i = fromIntegral (outer a) in cards !! i + locate (es !! i) a
+  }
+  where
+    cards = scanl (+) 0 (map (getFinite . card) es)
+
+    getFinite (Finite n) = n
+
 -- | Zip two enumerations in parallel, producing the pair of
 --   elements at each index.  The resulting enumeration is truncated
 --   to the cardinality of the smaller of the two arguments.
