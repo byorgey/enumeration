@@ -94,6 +94,7 @@ import qualified Data.Enumeration    as E
 -- $setup
 -- >>> :set -XTypeApplications
 -- >>> import Control.Arrow ((&&&))
+-- >>> import Data.Maybe (fromMaybe, listToMaybe)
 -- >>> :{
 --   data Tree = L | B Tree Tree deriving Show
 --   treesUpTo :: Int -> IEnumeration Tree
@@ -469,7 +470,8 @@ interleave e = IEnumeration
 -- >>> enumerate $ zipE nat (boundedEnum @Bool)
 -- [(0,False),(1,True)]
 --
--- >>> cs = mapE (uncurry replicate) (length &&& head) (zipE (finiteList [1..10]) (dropE 35 (boundedEnum @Char)))
+-- >>> headD x = fromMaybe x . listToMaybe
+-- >>> cs = mapE (uncurry replicate) (length &&& headD ' ') (zipE (finiteList [1..10]) (dropE 35 (boundedEnum @Char)))
 -- >>> enumerate cs
 -- ["#","$$","%%%","&&&&","'''''","((((((",")))))))","********","+++++++++",",,,,,,,,,,"]
 -- >>> locate cs "********"

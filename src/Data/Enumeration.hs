@@ -733,6 +733,22 @@ finiteEnumerationOf n a = case card a of
 
 -- Implementation of `integerSqrt` taken from the Haskell wiki:
 -- https://wiki.haskell.org/Generic_number_type#squareRoot
+
+-- | Find the square root (rounded down) of a positive integer.
+--
+-- >>> integerSqrt 0
+-- 0
+-- >>> integerSqrt 1
+-- 1
+-- >>> integerSqrt 3
+-- 1
+-- >>> integerSqrt 4
+-- 2
+-- >>> integerSqrt 38
+-- 6
+-- >>> integerSqrt 763686362402795580983595318628819602756
+-- 27634875834763498734
+
 integerSqrt :: Integer -> Integer
 integerSqrt 0 = 0
 integerSqrt 1 = 1
@@ -741,9 +757,14 @@ integerSqrt n =
       (lowerRoot, lowerN) =
         last $ takeWhile ((n>=) . snd) $ zip (1:twopows) twopows
       newtonStep x = div (x + div n x) 2
-      iters = iterate newtonStep (integerSqrt (div n lowerN ) * lowerRoot)
       isRoot r = r^!2 <= n && n < (r+1)^!2
-  in  head $ dropWhile (not . isRoot) iters
+      initGuess = integerSqrt (div n lowerN ) * lowerRoot
+  in  iterUntil isRoot newtonStep initGuess
+
+iterUntil :: (a -> Bool) -> (a -> a) -> a -> a
+iterUntil p f a
+  | p a = a
+  | otherwise = iterUntil p f (f a)
 
 (^!) :: Num a => a -> Int -> a
 (^!) x n = x^n

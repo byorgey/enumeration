@@ -5,4 +5,6 @@ main = doctest
   ,"src/Data/Enumeration/Invertible.hs"
   ,"src/Data/CoEnumeration.hs"
   ,"src/Data/ProEnumeration.hs"
+  ,"--fast"
+  ,"-package contravariant"
   ]
