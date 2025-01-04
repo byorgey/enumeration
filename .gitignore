@@ -3,3 +3,5 @@ stack.yaml.lock
 *~
 dist-newstyle/
 dist/
+TAGS
+cabal.project.local

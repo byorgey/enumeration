@@ -17,6 +17,7 @@ build-type:     Simple
 extra-source-files:
     README.md
     ChangeLog.md
+tested-with: GHC ==9.4.8 || ==9.6.6 || ==9.8.4 || ==9.10.1 || ==9.12.1
 
 source-repository head
   type: git
